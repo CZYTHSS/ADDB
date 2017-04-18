@@ -8,12 +8,109 @@ Stats* stats = new Stats();
 
 class Factor{
 	public:
-		virtual inline void search(){
-		}
-		virtual inline void subsolve(){
-		}
+		//virtual inline void search(){
+		//}
+        //virtual inline void subsolve(){
+		//}
 };
 
+class AFactor: public Factor{
+    public:
+		int K; //K stands for the size of this Factor
+		Float rho; //parameter for Augmented Lagrangian Method
+		Float* c; // score vector for this factor
+		Float nnz_tol; // tolerance of the algorithm, determines when to stop
+		pair<Float, int>* sorted_c; // sorted <value, index> pairs of c
+
+        bool tight; // whether simplex constraint is == 1 or >= 1
+
+		//maintained
+		//Float* grad;
+		Float* x;
+        //Float* msg;	//msg(j) = xi(j) - xtj(i) + uij	;  //within Factor xi
+		vector<pair<Float, int>>* act_set;  //act_set is a set of indexes. it represents all the locations in x & xt which are meaningful
+        //vector<int> ever_nnz_msg; //ever-none-zero: indicate this coordinate has never become nonezero. Once it becomes none-zero, it will remain in the act_set forever.
+		//bool* is_ever_nnz;
+        unordered_map<int, Float> msg_map;
+		int searched_index; 
+		inline AFactor(int _K, Float* _c, Param* param, bool _tight){
+			K = _K;
+			rho = param->rho;
+			nnz_tol = param->nnz_tol;
+			tight = _tight;
+
+			//compute score vector
+			c = _c;
+			sorted_c = new pair<Float, int>[K];
+			for (int k = 0; k < K; k++){
+				sorted_c[k] = make_pair(c[k], k);
+			}
+			sort(sorted_c, sorted_c+K, less<pair<Float, int>>());
+
+			//relaxed prediction vector
+			x = new Float[K];
+			memset(x, 0.0, sizeof(Float)*K);
+
+			//inside = new bool[K];
+			//memset(inside, false, sizeof(bool)*K);
+			//is_ever_nnz = new bool[K];
+			//memset(is_ever_nnz, false, sizeof(bool)*K);
+
+			//msg = new Float[K];
+			//memset(msg, 0.0, sizeof(Float)*K);
+			act_set = new vector<pair<Float, int>>();
+            act_set->clear();
+			//ever_nnz_msg.clear();
+            
+            msg_map.clear();
+
+			//fill_act_set();
+			//shrink = true;
+		}
+		~AFactor(){
+			delete[] x;
+			//delete[] inside;
+			//delete[] is_ever_act;
+			act_set->clear();
+			//delete msg;
+			delete sorted_c;
+			//delete is_ever_nnz;
+		}
+		
+        /** min_x <c/2 + msg, x> + rho/2 \|x\|_2^2
+         *  min_x \| x - (- (c/2 + msg)/rho) \|_2^2
+         *  b = - (c/2 + msg)/rho need to be sorted in decreasing order
+         *  need c sorted in decreasing order and a list of non-zero msg index
+         *  
+         *  
+         */
+        inline vector<pair<Float, int>>* subsolve(){
+			stats->uni_subsolve_time -= get_current_time();
+			
+            int act_count = 0;
+
+            vector<pair<Float, int>>* new_x;
+            int count = 0;
+            vector<pair<Float, int>>* msg = new vector<pair<Float, int>>();
+            for (unordered_map<int, Float>::const_iterator it = msg_map.begin(); it != msg_map.end(); it++){
+                msg->push_back(make_pair(it->second, it->first));
+            }
+            sort(msg->begin(), msg->end(), std::greater<pair<Float, int>>());
+
+			if (tight){
+                new_x = solve_simplex_full(sorted_c, msg);
+			} else {
+                cerr << "should not touch here now" << endl;
+                assert(false);
+                new_x = solve_simplex_full(sorted_c, msg);
+			}
+
+			stats->uni_subsolve_time += get_current_time();
+            return new_x;
+
+
+		}
+};
 
 //unigram factor, y follows simplex constraints
 class UniFactor : public Factor{

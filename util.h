@@ -19,13 +19,13 @@
 #include <cassert>
 using namespace std;
 
-typedef double Float;
+typedef float Float;
 typedef int Int;
 typedef vector<pair<Int,Float> > SparseVec;
 typedef unordered_map<Int,Float> HashVec;
 typedef vector<Int> Labels;
 typedef pair<Float, Int>* ArrayHeap;
-const Int LINE_LEN = 100000000;
+const Int LINE_LEN = 10000000;
 const Int FNAME_LEN = 1000;
 const Float INFI = 1e100;
 const Int INIT_SIZE = 16;
@@ -225,6 +225,11 @@ Int argmax( Float* arr, Int size ){
 		}
 	}
 	return kmax;
+}
+
+inline vector<pair<Float, int>>* solve_simplex_full(pair<Float, int>* c, vector<pair<Float, int>>* b){
+    vector<pair<Float, int>>* msg = new vector<pair<Float, int>>();
+    return msg;
 }
 
 // min_{\|y\|_1 = 1 and y >= 0} \| y - b\|_2^2
