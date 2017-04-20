@@ -98,11 +98,11 @@ class AFactor: public Factor{
             sort(msg->begin(), msg->end(), std::greater<pair<Float, int>>());
 
 			if (tight){
-                new_x = solve_simplex_full(sorted_c, msg);
+                new_x = solve_simplex_full(c, msg_map, sorted_c, K);
 			} else {
                 cerr << "should not touch here now" << endl;
                 assert(false);
-                new_x = solve_simplex_full(sorted_c, msg);
+                new_x = solve_simplex_full(c, msg_map, sorted_c, K);
 			}
 
 			stats->uni_subsolve_time += get_current_time();
