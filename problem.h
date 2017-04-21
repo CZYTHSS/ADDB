@@ -23,6 +23,7 @@ class Param{
 		bool MultiLabel;
 		bool print_to_loguai2;
 		string loguai2fname;
+        bool agd;
 
 		Param(){
 			print_to_loguai2 = false;
@@ -37,6 +38,7 @@ class Param{
 			grad_tol = 1e-4;
 			nnz_tol = 1e-8;
 			MultiLabel = false;
+            agd = false;
 		}
 };
 

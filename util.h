@@ -19,7 +19,7 @@
 #include <cassert>
 using namespace std;
 
-typedef float Float;
+typedef double Float;
 typedef int Int;
 typedef vector<pair<Int,Float> > SparseVec;
 typedef unordered_map<Int,Float> HashVec;
@@ -234,7 +234,7 @@ Int argmax( Float* arr, Int size ){
  *  sorted_sparse: <index, value> pairs sorted from {pair<c_i+y_i, i>| y_i != 0 }
  *
  */
-inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int, Float>& msg_map, pair<Float, int>* sorted_dense, int n, bool tight, Float rho){
+inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int, double>& msg_map, pair<Float, int>* sorted_dense, int n, bool tight, Float rho){
     vector<pair<double, int>>* msg = new vector<pair<double, int>>();
     //cout << "tight=" << tight << endl;
     //cout << "c:\t";
@@ -248,7 +248,7 @@ inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int,
     //}
     //cout << endl;
     //cout << "msg:\t";
-    for (unordered_map<int, Float>::iterator it_map = msg_map.begin(); it_map != msg_map.end(); it_map++){
+    for (unordered_map<int, double>::iterator it_map = msg_map.begin(); it_map != msg_map.end(); it_map++){
         int idx = it_map->first;
         Float val = it_map->second;
         double cy = c[idx] - val;

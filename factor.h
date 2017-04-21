@@ -27,11 +27,12 @@ class AFactor: public Factor{
 		//maintained
 		//Float* grad;
 		Float* x;
+        Float* yacc;
         //Float* msg;	//msg(j) = xi(j) - xtj(i) + uij	;  //within Factor xi
 		vector<pair<Float, int>>* act_set;  //act_set is a set of indexes. it represents all the locations in x & xt which are meaningful
         //vector<int> ever_nnz_msg; //ever-none-zero: indicate this coordinate has never become nonezero. Once it becomes none-zero, it will remain in the act_set forever.
 		//bool* is_ever_nnz;
-        unordered_map<int, Float> msg_map;
+        unordered_map<int, double> msg_map;
 		int searched_index; 
 		inline AFactor(int _K, Float* _c, Param* param, bool _tight){
 			K = _K;
@@ -50,6 +51,8 @@ class AFactor: public Factor{
 			//relaxed prediction vector
 			x = new Float[K];
 			memset(x, 0.0, sizeof(Float)*K);
+			yacc = new Float[K];
+			memset(yacc, 0.0, sizeof(Float)*K);
 
 			//inside = new bool[K];
 			//memset(inside, false, sizeof(bool)*K);
@@ -68,7 +71,8 @@ class AFactor: public Factor{
 			//shrink = true;
 		}
 		~AFactor(){
-			delete[] x;
+			delete x;
+            delete yacc;
 			//delete[] inside;
 			//delete[] is_ever_act;
 			act_set->clear();
@@ -91,17 +95,17 @@ class AFactor: public Factor{
 
             vector<pair<Float, int>>* new_x;
             int count = 0;
-            vector<pair<Float, int>>* msg = new vector<pair<Float, int>>();
-            for (unordered_map<int, Float>::const_iterator it = msg_map.begin(); it != msg_map.end(); it++){
+            vector<pair<double, int>>* msg = new vector<pair<double, int>>();
+            for (unordered_map<int, double>::const_iterator it = msg_map.begin(); it != msg_map.end(); it++){
                 msg->push_back(make_pair(it->second, it->first));
             }
-            sort(msg->begin(), msg->end(), std::greater<pair<Float, int>>());
+            sort(msg->begin(), msg->end(), std::greater<pair<double, int>>());
 
             new_x = solve_simplex_full(c, msg_map, sorted_c, K, tight, rho);
-            for (vector<pair<Float, int>>::iterator it = act_set->begin(); it!= act_set->end(); it++){
+            for (auto it = act_set->begin(); it!= act_set->end(); it++){
                 x[it->second] = 0.0;
             }
-            for (vector<pair<Float, int>>::iterator it = new_x->begin(); it!= new_x->end(); it++){
+            for (auto it = new_x->begin(); it!= new_x->end(); it++){
                 x[it->second] = it->first;
             }
 			stats->uni_subsolve_time += get_current_time();
