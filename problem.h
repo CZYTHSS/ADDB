@@ -180,14 +180,14 @@ class BipartiteMatchingProblem : public Problem{
 			for (int i = 0; i < a; i++){
 				Float* c_i = new Float[b];
 				for (int j = 0; j < b; j++){
-					c_i[j] = c[i*b+j];
+					c_i[j] = -c[i*b+j]/2.0;
 				}
 				node_score_vecs.push_back(c_i);
 			}
 			for (int j = 0; j < b; j++){
 				Float* c_j = new Float[a];
 				for (int i = 0; i < a; i++){
-					c_j[i] = c[i*a+j];
+					c_j[i] = -c[i*a+j]/2.0;
 				}
 				node_score_vecs.push_back(c_j);
 			}

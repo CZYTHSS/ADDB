@@ -45,7 +45,7 @@ class AFactor: public Factor{
 			for (int k = 0; k < K; k++){
 				sorted_c[k] = make_pair(c[k], k);
 			}
-			sort(sorted_c, sorted_c+K, less<pair<Float, int>>());
+			sort(sorted_c, sorted_c+K, greater<pair<Float, int>>());
 
 			//relaxed prediction vector
 			x = new Float[K];
@@ -97,18 +97,15 @@ class AFactor: public Factor{
             }
             sort(msg->begin(), msg->end(), std::greater<pair<Float, int>>());
 
-			if (tight){
-                new_x = solve_simplex_full(c, msg_map, sorted_c, K);
-			} else {
-                cerr << "should not touch here now" << endl;
-                assert(false);
-                new_x = solve_simplex_full(c, msg_map, sorted_c, K);
-			}
-
+            new_x = solve_simplex_full(c, msg_map, sorted_c, K, tight, rho);
+            for (vector<pair<Float, int>>::iterator it = act_set->begin(); it!= act_set->end(); it++){
+                x[it->second] = 0.0;
+            }
+            for (vector<pair<Float, int>>::iterator it = new_x->begin(); it!= new_x->end(); it++){
+                x[it->second] = it->first;
+            }
 			stats->uni_subsolve_time += get_current_time();
             return new_x;
-
-
 		}
 };
 

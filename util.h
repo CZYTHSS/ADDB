@@ -234,22 +234,41 @@ Int argmax( Float* arr, Int size ){
  *  sorted_sparse: <index, value> pairs sorted from {pair<c_i+y_i, i>| y_i != 0 }
  *
  */
-inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int, Float>& msg_map, pair<Float, int>* sorted_dense, int n){
-    vector<pair<Float, int>>* msg = new vector<pair<Float, int>>();
+inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int, Float>& msg_map, pair<Float, int>* sorted_dense, int n, bool tight, Float rho){
+    vector<pair<double, int>>* msg = new vector<pair<double, int>>();
+    //cout << "tight=" << tight << endl;
+    //cout << "c:\t";
+    //for (int i = 0; i < n; i++){
+    //    cout << c[i] << " ";
+    //}
+    //cout << endl;
+    //cout << "sorted_c:\t";
+    //for (int i = 0; i < n; i++){    
+    //    cout << "(" << sorted_dense[i].second << "," << sorted_dense[i].first << ")" << " ";
+    //}
+    //cout << endl;
+    //cout << "msg:\t";
     for (unordered_map<int, Float>::iterator it_map = msg_map.begin(); it_map != msg_map.end(); it_map++){
         int idx = it_map->first;
         Float val = it_map->second;
-        Float cy = c[idx] + val;
+        double cy = c[idx] - val;
         msg->push_back(make_pair(cy, idx));
+        //cout << "(" << idx << "," << cy << ")" << " ";
     }
-    sort(msg->begin(), msg->end(), std::greater<pair<Float, int>>());
-    vector<pair<Float, int>>::iterator it_sparse = msg->begin();
+    //cout << endl;
+    sort(msg->begin(), msg->end(), std::greater<pair<double, int>>());
+    vector<pair<double, int>>::iterator it_sparse = msg->begin();
     pair<Float, int>* it_dense = sorted_dense;
-    vector<pair<Float, int>> cy;
-    Float sum = 0.0;
-    vector<pair<Float, int>> ans;
+    vector<pair<double, int>> cy;
+    vector<pair<Float, int>>* ans = new vector<pair<Float, int>>();
     int i = 0;
-    while ((it_sparse != msg->end()) && (it_dense != sorted_dense+n)){
+    double last_l, last_r, last_sum, last_t;
+    double sum = 0.0, t, l, r;
+    while ((it_dense+1 <= sorted_dense+n) && (msg_map.find(it_dense->second) != msg_map.end())){
+        it_dense++;
+    }
+    while ((it_sparse != msg->end()) || (it_dense != sorted_dense+n)){
+
         if (it_dense == sorted_dense+n){
             cy.push_back(*it_sparse);
             it_sparse++;
@@ -262,34 +281,68 @@ inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int,
                 it_sparse++;
             }
         }
+        cy[i].first /= rho;
         sum += cy[i].first;
-        double t = 0.0;
-        double l = (sum-1.0)/(i+1);
-        double r = cy[i].first;
-        if (l <= r){
-            if (r <= 0){
-                t = r;
-            } else {
-                if (l >= 0){
-                    t = l;
-                } else {
-                    t = 0;
-                }
-            }
-            for (int j = 0; j <= i; j++){
-                Float x = cy[j].first - t;
-                if (x < 0.0){
-                    x = 0.0;
-                }
-                assert(x <= 1.0+1e-6);
-                ans.push_back(make_pair(x, cy[j].second));
-            }
+        //cout << "sum=" << sum << endl;
+        t = (sum-1.0)/(i+1);
+        l = (sum-1.0)/(i+1);
+        r = cy[i].first;
+		if (tight && cy[i].first < t){
+            break; 
+        }
+        if ((!tight) && (l > r)){
             break;
         }
+        last_l = l;
+        last_r = r;
+        last_sum = sum;
+        last_t = t;
         i++;
+        while ((it_dense+1 <= sorted_dense+n) && (msg_map.find(it_dense->second) != msg_map.end())){
+            it_dense++;
+        }
+    }
+    if (tight){
+        sum = last_sum;
+        t = last_t;
+        //cout << "sum=" << sum << ", t=" << t << endl;
+        for (int j = 0; j < i; j++){
+            Float x = cy[j].first - t;
+            if (x < 0.0){
+                x = 0.0;
+            }
+            //assert(x <= 1.0+1e-6);
+            ans->push_back(make_pair(x, cy[j].second));
+        }
+    } else {
+        l = last_l;
+        r = last_r;
+        if (r <= 0){
+            t = r;
+        } else {
+            if (l >= 0){
+                t = l;
+            } else {
+                t = 0;
+            }
+        }
+        for (int j = 0; j < i; j++){
+            Float x = cy[j].first - t;
+            if (x < 0.0){
+                x = 0.0;
+            }
+            //assert(x <= 1.0+1e-6);
+            ans->push_back(make_pair(x, cy[j].second));
+        }
     }
 
-    return &ans;
+    //cout << "ans:\t";
+    //for (int i = 0; i < ans->size(); i++){ 
+    //    cout << "(" << ans->at(i).second << "," << ans->at(i).first << ")" << " ";
+    //}
+    //cout << endl;
+    //cout << "." << endl;
+    return ans;
 }
 
 // min_{\|y\|_1 = 1 and y >= 0} \| y - b\|_2^2
