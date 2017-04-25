@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <cassert>
+#include "heap.h"
 using namespace std;
 
 typedef double Float;
@@ -143,6 +144,7 @@ class PermutationHash {
 	Int K;
 };
 
+
 vector<string> split(string str, string pattern){
 
 	vector<string> str_split;
@@ -234,8 +236,7 @@ Int argmax( Float* arr, Int size ){
  *  sorted_sparse: <index, value> pairs sorted from {pair<c_i+y_i, i>| y_i != 0 }
  *
  */
-inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int, double>& msg_map, pair<Float, int>* sorted_dense, int n, bool tight, Float rho){
-    vector<pair<double, int>>* msg = new vector<pair<double, int>>();
+inline vector<pair<Float, int>>* solve_simplex_full(Float* c, IndexedHeap* msg_heap, pair<Float, int>* sorted_dense, int n, bool tight, Float rho){
     //cout << "tight=" << tight << endl;
     //cout << "c:\t";
     //for (int i = 0; i < n; i++){
@@ -243,42 +244,38 @@ inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int,
     //}
     //cout << endl;
     //cout << "sorted_c:\t";
-    //for (int i = 0; i < n; i++){    
+    //for (int i = 0; i < n; i++){
     //    cout << "(" << sorted_dense[i].second << "," << sorted_dense[i].first << ")" << " ";
     //}
     //cout << endl;
     //cout << "msg:\t";
-    for (unordered_map<int, double>::iterator it_map = msg_map.begin(); it_map != msg_map.end(); it_map++){
-        int idx = it_map->first;
-        Float val = it_map->second;
-        double cy = c[idx] - val;
-        msg->push_back(make_pair(cy, idx));
-        //cout << "(" << idx << "," << cy << ")" << " ";
-    }
+    //
+    //for (auto it_map = msg_heap->begin(); it_map != msg_heap->end(); it_map++){
+    //    int idx = it_map->second;
+    //    Float val = it_map->first;
+    //    cout << "(" << idx << "," << val << ")" << " ";
+    //}
     //cout << endl;
-    sort(msg->begin(), msg->end(), std::greater<pair<double, int>>());
-    vector<pair<double, int>>::iterator it_sparse = msg->begin();
+
     pair<Float, int>* it_dense = sorted_dense;
     vector<pair<double, int>> cy;
     vector<pair<Float, int>>* ans = new vector<pair<Float, int>>();
     int i = 0;
     double last_l, last_r, last_sum, last_t;
     double sum = 0.0, t, l, r;
-    while ((it_dense+1 <= sorted_dense+n) && (msg_map.find(it_dense->second) != msg_map.end())){
+    while ( (it_dense+1 <= sorted_dense+n) && msg_heap->hasKey(it_dense->second) ){
         it_dense++;
     }
-    while ((it_sparse != msg->end()) || (it_dense != sorted_dense+n)){
-
+    pair<double, int> cur_p;
+    while ((msg_heap->size() > 0) || (it_dense != sorted_dense+n)){
         if (it_dense == sorted_dense+n){
-            cy.push_back(*it_sparse);
-            it_sparse++;
+            cy.push_back(msg_heap->pop());
         } else {
-            if ((it_sparse == msg->end()) || (it_sparse->first <= it_dense->first)){
+            if ( (msg_heap->size() == 0) || (msg_heap->top().first <= it_dense->first) ){
                 cy.push_back(*it_dense);
                 it_dense++;
             } else {
-                cy.push_back(*it_sparse);
-                it_sparse++;
+                cy.push_back(msg_heap->pop());
             }
         }
         cy[i].first /= rho;
@@ -298,7 +295,7 @@ inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int,
         last_sum = sum;
         last_t = t;
         i++;
-        while ((it_dense+1 <= sorted_dense+n) && (msg_map.find(it_dense->second) != msg_map.end())){
+        while ( (it_dense+1 <= sorted_dense+n) && msg_heap->hasKey(it_dense->second) ){
             it_dense++;
         }
     }
@@ -311,7 +308,7 @@ inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int,
             if (x < 0.0){
                 x = 0.0;
             }
-            //assert(x <= 1.0+1e-6);
+            assert(x <= 1.0+1e-6);
             ans->push_back(make_pair(x, cy[j].second));
         }
     } else {
@@ -331,11 +328,15 @@ inline vector<pair<Float, int>>* solve_simplex_full(Float* c, unordered_map<int,
             if (x < 0.0){
                 x = 0.0;
             }
-            //assert(x <= 1.0+1e-6);
+            assert(x <= 1.0+1e-6);
             ans->push_back(make_pair(x, cy[j].second));
         }
     }
-
+    
+    for (auto it = cy.begin(); it != cy.end(); it++){
+        it->first *= rho;
+        msg_heap->push(*it);
+    }
     //cout << "ans:\t";
     //for (int i = 0; i < ans->size(); i++){ 
     //    cout << "(" << ans->at(i).second << "," << ans->at(i).first << ")" << " ";

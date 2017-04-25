@@ -9,18 +9,22 @@ Stats* stats = new Stats();
 class Factor{
 	public:
 		//virtual inline void search(){
-		//}
-        //virtual inline void subsolve(){
-		//}
+		////}
+        virtual inline void subsolve(){
+		}
 };
 
 class AFactor: public Factor{
     public:
 		int K; //K stands for the size of this Factor
+        int denseK;
 		Float rho; //parameter for Augmented Lagrangian Method
 		Float* c; // score vector for this factor
+
 		Float nnz_tol; // tolerance of the algorithm, determines when to stop
 		pair<Float, int>* sorted_c; // sorted <value, index> pairs of c
+        unordered_map<int, int> rev_index_map;
+        int* index;
 
         bool tight; // whether simplex constraint is == 1 or >= 1
 
@@ -32,14 +36,16 @@ class AFactor: public Factor{
 		vector<pair<Float, int>>* act_set;  //act_set is a set of indexes. it represents all the locations in x & xt which are meaningful
         //vector<int> ever_nnz_msg; //ever-none-zero: indicate this coordinate has never become nonezero. Once it becomes none-zero, it will remain in the act_set forever.
 		//bool* is_ever_nnz;
-        unordered_map<int, double> msg_map;
-		int searched_index; 
-		inline AFactor(int _K, Float* _c, Param* param, bool _tight){
-			K = _K;
+        IndexedHeap* msg_heap;
+        
+		inline AFactor(int _denseK, int _K, int* _index, Float* _c, Param* param, bool _tight){
+            K = _K;
+            denseK = _denseK;
 			rho = param->rho;
 			nnz_tol = param->nnz_tol;
 			tight = _tight;
-
+            index = _index;
+            
 			//compute score vector
 			c = _c;
 			sorted_c = new pair<Float, int>[K];
@@ -52,7 +58,13 @@ class AFactor: public Factor{
 			x = new Float[K];
 			memset(x, 0.0, sizeof(Float)*K);
 			yacc = new Float[K];
-			memset(yacc, 0.0, sizeof(Float)*K);
+            for (int i = 0; i < K; i++){
+                yacc[i] = c[i];
+            }
+
+            for (int k = 0; k < K; k++){
+                rev_index_map.insert(make_pair(index[k], k));
+            }
 
 			//inside = new bool[K];
 			//memset(inside, false, sizeof(bool)*K);
@@ -65,7 +77,7 @@ class AFactor: public Factor{
             act_set->clear();
 			//ever_nnz_msg.clear();
             
-            msg_map.clear();
+            msg_heap = new IndexedHeap(K);
 
 			//fill_act_set();
 			//shrink = true;
@@ -77,6 +89,7 @@ class AFactor: public Factor{
 			//delete[] is_ever_act;
 			act_set->clear();
 			//delete msg;
+            rev_index_map.clear();
 			delete sorted_c;
 			//delete is_ever_nnz;
 		}
@@ -88,29 +101,36 @@ class AFactor: public Factor{
          *  
          *  
          */
-        inline vector<pair<Float, int>>* subsolve(){
+        inline void subsolve(){
 			stats->uni_subsolve_time -= get_current_time();
 			
             int act_count = 0;
+            
+            vector<pair<double, int>>* new_x = solve_simplex_full(c, msg_heap, sorted_c, K, tight, rho);
 
-            vector<pair<Float, int>>* new_x;
-            int count = 0;
-            vector<pair<double, int>>* msg = new vector<pair<double, int>>();
-            for (unordered_map<int, double>::const_iterator it = msg_map.begin(); it != msg_map.end(); it++){
-                msg->push_back(make_pair(it->second, it->first));
-            }
-            sort(msg->begin(), msg->end(), std::greater<pair<double, int>>());
-
-            new_x = solve_simplex_full(c, msg_map, sorted_c, K, tight, rho);
             for (auto it = act_set->begin(); it!= act_set->end(); it++){
                 x[it->second] = 0.0;
             }
             for (auto it = new_x->begin(); it!= new_x->end(); it++){
                 x[it->second] = it->first;
             }
+            act_set = new_x;
+
 			stats->uni_subsolve_time += get_current_time();
-            return new_x;
 		}
+
+        inline Float dual_obj(){
+            Float dual_obj = 0.0;
+            for (vector<pair<double, int>>::const_iterator it = msg_heap->begin(); it != msg_heap->end(); it++){
+                dual_obj -= it->first*x[it->second];
+            }
+            for (auto it = act_set->begin(); it!= act_set->end(); it++){
+                if (!msg_heap->hasKey(it->second)){
+                    dual_obj -= it->first*c[it->second];
+                }
+            }
+            return dual_obj;
+        }
 };
 
 //unigram factor, y follows simplex constraints

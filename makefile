@@ -21,12 +21,13 @@ rho=1
 eta=1
 infea_tol=1e-3
 testno=1
+opt=
 
 .PHONY:pos 107network
 
 emd:
 	$(eval test_file := $(data_dir)/$@)
-	./predict -p bipartite -s 2 -o $(rho) -e $(eta) -m $(m) $(test_file)
+	./predict -p bipartite -s 2 -o $(rho) -e $(eta) -m $(m) $(opt) $(test_file)
 
 lapjv:
 	$(eval test_file := $(data_dir)/emd)

@@ -96,13 +96,13 @@ double struct_predict(Problem* prob, Param* param){
 	cout << "constructing factors...";
 	vector<AFactor*> x;	//x is the permutation matrix sliced depend on rows.
 	for (int i = 0; i < a; i++){
-		AFactor* x_i = new AFactor(b, prob->node_score_vecs[i], param, true);
+		AFactor* x_i = new AFactor(b, prob->size[i], prob->node_index_vecs[i], prob->node_score_vecs[i], param, true);
 		x.push_back(x_i);
 	}
 	vector<AFactor*> xt;	//xt is the transpose matrix of x. a permutation matrix slieced depend on columns;
-	for (int i = 0; i < b; i++){
-		AFactor* xt_i = new AFactor(a, prob->node_score_vecs[a+i], param, (a==b));
-		xt.push_back(xt_i);
+	for (int j = 0; j < b; j++){
+		AFactor* xt_j = new AFactor(a, prob->size[a+j], prob->node_index_vecs[a+j], prob->node_score_vecs[a+j], param, (a==b));
+		xt.push_back(xt_j);
 	}
 	cout << "done" << endl;
 
@@ -133,189 +133,130 @@ double struct_predict(Problem* prob, Param* param){
 				AFactor* node = x[i];		// the i th row of permutation matrix P.
 
 				//given active set, solve subproblem
-				vector<pair<Float, int>>* new_x = node->subsolve();
+				node->subsolve();
+
                 stats->maintain_time -= get_current_time(); 
-                vector<pair<Float, int>>* act_set = node->act_set;
-                unordered_map<int, double>& msg_map = node->msg_map;
-                //for (vector<pair<Float, int>>::iterator it_x = act_set->begin(); it_x != act_set->end(); it_x++){
-                //    Float old_x = it_x->first;
-                //    int idx = it_x->second;
-                //    unordered_map<int, Float>::iterator it = msg_map.find(idx);
-                //    it->second -= old_x;
-                //    unordered_map<int, Float>::iterator it2 = xt[idx]->msg_map.find(i);
-                //    it2->second += old_x;
-                //}
-                //for (vector<pair<Float, int>>::iterator it_x = new_x->begin(); it_x != new_x->end(); it_x++){
-                //    Float val = it_x->first;
-                //    int idx = it_x->second;
-                //    unordered_map<int, Float>::iterator it = msg_map.find(idx);
-                //    if (it == msg_map.end()){
-                //        msg_map.insert(make_pair(idx, val));
-                //    } else {
-                //        it->second += val;
-                //    }
-                //    unordered_map<int, Float>::iterator it2 = xt[idx]->msg_map.find(i);
-                //    if (it2 == xt[idx]->msg_map.end()){
-                //        xt[idx]->msg_map.insert(make_pair(i, -val));
-                //    } else {
-                //        it2->second -= val;
-                //    }
-                //}
-                act_set->clear();
-                node->act_set = new_x;
 				act_size_sum += node->act_set->size();
-				ever_nnz_size_sum += node->msg_map.size();
+				ever_nnz_size_sum += node->msg_heap->size();
 				stats->maintain_time += get_current_time(); 
 			} else {
 				int j = k - a;
 				AFactor* node = xt[j];
                 
-				stats->maintain_time -= get_current_time(); 
-				vector<pair<Float, int>>* new_x  = node->subsolve();
+				node->subsolve();
 				
                 stats->maintain_time -= get_current_time(); 
-                vector<pair<Float, int>>* act_set = node->act_set;
-                unordered_map<int, double>& msg_map = node->msg_map;
-                //for (vector<pair<Float, int>>::iterator it_x = act_set->begin(); it_x != act_set->end(); it_x++){
-                //    Float old_x = it_x->first;
-                //    int idx = it_x->second;
-                //    unordered_map<int, Float>::iterator it = msg_map.find(idx);
-                //    it->second -= old_x;
-                //    unordered_map<int, Float>::iterator it2 = x[idx]->msg_map.find(j);
-                //    it2->second += old_x;
-                //}
-                //for (vector<pair<Float, int>>::iterator it_x = new_x->begin(); it_x != new_x->end(); it_x++){
-                //    Float val = it_x->first;
-                //    int idx = it_x->second;
-                //    unordered_map<int, Float>::iterator it = msg_map.find(idx);
-                //    if (it == msg_map.end()){
-                //        msg_map.insert(make_pair(idx, val));
-                //    } else {
-                //        it->second += val;
-                //    }
-                //    unordered_map<int, Float>::iterator it2 = x[idx]->msg_map.find(j);
-                //    if (it2 == x[idx]->msg_map.end()){
-                //        x[idx]->msg_map.insert(make_pair(j, -val));
-                //    } else {
-                //        it2->second -= val;
-                //    }
-                //}
-                act_set->clear();
-                node->act_set = new_x;
 				act_size_sum += node->act_set->size();
-				ever_nnz_size_sum += node->msg_map.size();
+				ever_nnz_size_sum += node->msg_heap->size();
 				stats->maintain_time += get_current_time(); 
 			}
 		}
 		// msg[i] = (x[i][j] - xt[j][i] + mu[i][j])
 		// msg[i] = (x[i][j] - xt[j][i] + mu[i][j])
-	    //cout << "maintain..." << endl;	
         stats->maintain_time -= get_current_time(); 
         Float msg_delta = 0.0;
 		for (int i = 0; i < a; i++){
 			for (vector<pair<Float, int>>::iterator it = x[i]->act_set->begin(); it != x[i]->act_set->end(); it++){
-				int j = it->second;
-                double delta = eta*(it->first-xt[j]->x[i]);
-                if (abs(delta) < 1e-12){
+				int idx_ij = it->second;
+                int j = x[i]->index[idx_ij];
+                int idx_ji = xt[j]->rev_index_map.find(i)->second;
+                double delta = eta*(xt[j]->x[idx_ji]-it->first);
+                if (abs(delta) < 1e-20){
                     continue;
                 }
                 msg_delta += abs(delta);
-                if (x[i]->msg_map.find(j) == x[i]->msg_map.end()){
-                    x[i]->msg_map.insert(make_pair(j, 0.0));
-                }
-                if (xt[j]->msg_map.find(i) == xt[j]->msg_map.end()){
-                    xt[j]->msg_map.insert(make_pair(i, 0.0));
-                }
-                unordered_map<int, double>::iterator it_x = x[i]->msg_map.find(j);
-                unordered_map<int, double>::iterator it_xt = xt[j]->msg_map.find(i);
-                
-                if (!agd){
-                    it_x->second += delta;
-                    it_xt->second -= delta;
+                double msgx_ij, msgxt_ji;
+                if (!x[i]->msg_heap->hasKey(idx_ij)){
+                    msgx_ij = x[i]->c[idx_ij] + delta;
                 } else {
-                    ///AGD
-                    double msgx_ij = it_x->second, msgxt_ji = it_xt->second;
-                    it_x->second = x[i]->yacc[j]*gamma + (1.0-gamma)*(msgx_ij + delta);
-                    it_xt->second = xt[j]->yacc[i]*gamma + (1.0-gamma)*(msgxt_ji - delta);
-                    x[i]->yacc[j] = msgx_ij + delta;
-                    xt[j]->yacc[i] = msgxt_ji - delta;
-                    //////
+                    msgx_ij = x[i]->msg_heap->get_value(idx_ij) + delta;
+                }
+                if (!xt[j]->msg_heap->hasKey(idx_ji)){
+                    msgxt_ji = xt[j]->c[idx_ji] - delta;
+                } else {
+                    msgxt_ji = xt[j]->msg_heap->get_value(idx_ji) - delta;
+                }
+                
+                if (agd){
+                    //cout << "i=" << i << ", j=" << j << ", gamma=" << gamma << ", next_Y=" << (x[i]->yacc[j]*gamma + (1.0-gamma)*msgx_ij) << ", y=" << msgx_ij << endl;
+                    x[i]->msg_heap->update(idx_ij, x[i]->yacc[idx_ij]*gamma + (1.0-gamma)*msgx_ij);
+                    //cout << "j=" << j << ", i=" << i << ", gamma=" << gamma << ", next_Y=" << (xt[j]->yacc[i]*gamma + (1.0-gamma)*msgxt_ji) << ", y=" << msgxt_ji << endl;
+                    xt[j]->msg_heap->update(idx_ji, xt[j]->yacc[idx_ji]*gamma + (1.0-gamma)*msgxt_ji);
+                    x[i]->yacc[idx_ij] = msgx_ij;
+                    xt[j]->yacc[idx_ji] = msgxt_ji;
+                } else {
+                    //cout << "updating:" << "i=" << i << ", j=" << idx_ij << ", delta=" << delta<< endl;
+                    x[i]->msg_heap->update(idx_ij, msgx_ij);
+                    //cout << "updating:" << "j=" << j << ", i=" << idx_ji << ", delta=" << (-delta) << endl;
+                    xt[j]->msg_heap->update(idx_ji, msgxt_ji);
                 }
 			}
 		}
 		for (int j = 0; j < b; j++){
 			for (vector<pair<Float, int>>::iterator it = xt[j]->act_set->begin(); it != xt[j]->act_set->end(); it++){
-				int i = it->second;
-                if (abs(x[i]->x[j]) > 1e-6){
+				int idx_ji = it->second;
+                int i = xt[j]->index[idx_ji];
+                int idx_ij = x[i]->rev_index_map.find(j)->second;
+                if (abs(x[i]->x[idx_ij]) > 1e-20){
                     continue;
                 }
-                double delta = eta*(x[i]->x[j]-it->first);
-                if (abs(delta) < 1e-12){
+                double delta = eta*(it->first-x[i]->x[idx_ij]);
+                if (abs(delta) < 1e-20){
                     continue;
                 }
                 msg_delta += abs(delta);
-                if (x[i]->msg_map.find(j) == x[i]->msg_map.end()){
-                    x[i]->msg_map.insert(make_pair(j, 0.0));
-                }
-                if (xt[j]->msg_map.find(i) == xt[j]->msg_map.end()){
-                    xt[j]->msg_map.insert(make_pair(i, 0.0));
-                }
-                unordered_map<int, double>::iterator it_x = x[i]->msg_map.find(j);
-                unordered_map<int, double>::iterator it_xt = xt[j]->msg_map.find(i);
-                if (!agd){
-                    it_x->second += delta;
-                    it_xt->second -= delta;
+                double msgx_ij, msgxt_ji;
+                if (!x[i]->msg_heap->hasKey(idx_ij)){
+                    msgx_ij = x[i]->c[idx_ij] + delta;
                 } else {
-                    ///AGD
-                    double msgx_ij = it_x->second, msgxt_ji = it_xt->second;
-                    it_x->second = x[i]->yacc[j]*gamma + (1.0-gamma)*(msgx_ij + delta);
-                    it_xt->second = xt[j]->yacc[i]*gamma + (1.0-gamma)*(msgxt_ji - delta);
-                    x[i]->yacc[j] = msgx_ij + delta;
-                    xt[j]->yacc[i] = msgxt_ji - delta;
-                    //////
+                    msgx_ij = x[i]->msg_heap->get_value(idx_ij) + delta;
+                }
+                if (!xt[j]->msg_heap->hasKey(idx_ji)){
+                    msgxt_ji = xt[j]->c[idx_ji] - delta;
+                } else {
+                    msgxt_ji = xt[j]->msg_heap->get_value(idx_ji) - delta;
+                }
+                
+                if (agd){
+                    //cout << "i=" << i << ", j=" << j << ", gamma=" << gamma << ", next_Y=" << (x[i]->yacc[j]*gamma + (1.0-gamma)*msgx_ij) << ", y=" << msgx_ij << endl;
+                    x[i]->msg_heap->update(idx_ij, x[i]->yacc[idx_ij]*gamma + (1.0-gamma)*msgx_ij);
+                    //cout << "j=" << j << ", i=" << i << ", gamma=" << gamma << ", next_Y=" << (xt[j]->yacc[i]*gamma + (1.0-gamma)*msgxt_ji) << ", y=" << msgxt_ji << endl;
+                    xt[j]->msg_heap->update(idx_ji, xt[j]->yacc[idx_ji]*gamma + (1.0-gamma)*msgxt_ji);
+                    x[i]->yacc[idx_ij] = msgx_ij;
+                    xt[j]->yacc[idx_ji] = msgxt_ji;
+                } else {
+                    //cout << "updating:" << "i=" << i << ", j=" << idx_ij << ", delta=" << delta << endl;
+                    x[i]->msg_heap->update(idx_ij, msgx_ij);
+                    //cout << "updating:" << "j=" << j << ", i=" << idx_ji << ", delta=" << (-delta) << endl;
+                    xt[j]->msg_heap->update(idx_ji, msgxt_ji);
                 }
             }
-            //for (vector<int>::iterator it = xt[j]->act_set.begin(); it != xt[j]->act_set.end(); it++){
-			//	int i = *it;
-			//	Float delta = -xt[j]->y[i];
-			//	x[i]->msg[j] += delta;
-			//	xt[j]->msg[i] -= delta;
-			//	if (abs(x[i]->msg[j]) > 1e-12){
-			//		x[i]->add_ever_nnz(j);
-			//		xt[j]->add_ever_nnz(i);
-			//	}
-			//}
 		}
-        float msg_sum = 0.0;
-        for (int i = 0; i < a; i++){
-			for (auto it = x[i]->msg_map.begin(); it != x[i]->msg_map.end(); it++){
-                msg_sum += abs(it->second);
-            }
-        }
-        for (int j = 0; j < b; j++){
-			for (auto it = xt[j]->msg_map.begin(); it != xt[j]->msg_map.end(); it++){
-                msg_sum += abs(it->second);
-            }
-        }
-
-		Float cost = 0.0, infea = 0.0;
+        
+		Float cost = 0.0, infea = 0.0, dual_obj = 0.0;
 		for (int i = 0; i < a; i++){
+            dual_obj += x[i]->dual_obj();
 			for (vector<pair<Float, int>>::iterator it = x[i]->act_set->begin(); it != x[i]->act_set->end(); it++){
-				int j = it->second;
-				cost += it->first * x[i]->c[j];
+				int idx_ij = it->second;
+                int j = x[i]->index[idx_ij];
+                int idx_ji = xt[j]->rev_index_map.find(i)->second;
+				cost += it->first * x[i]->c[idx_ij];
                 //cout << "i=" << i << ", j=" << j << ", infea=" << abs(xt[j]->x[i] - it->first) << endl;
-				infea += abs(xt[j]->x[i] - it->first);
+				infea += abs(xt[j]->x[idx_ji] - it->first);
 				//cout << "(" << j << "," << it->first << ")" << "\t";
 			}
             //cout << endl;
 		}
 
 		for (int j = 0; j < b; j++){
+            dual_obj += xt[j]->dual_obj();
 			for (vector<pair<Float, int>>::iterator it = xt[j]->act_set->begin(); it != xt[j]->act_set->end(); it++){
-				int i = it->second;
-				cost += it->first * xt[j]->c[i];
+				int idx_ji = it->second;
+                int i = xt[j]->index[idx_ji];
+                int idx_ij = x[i]->rev_index_map.find(j)->second;
+				cost += it->first * xt[j]->c[idx_ji];
                 //cout << "i=" << i << ", j=" << j << ", infea=" << abs(it->first-x[i]->x[j]) << endl;
-				infea += abs(it->first - x[i]->x[j]);
+				infea += abs(it->first - x[i]->x[idx_ij]);
 				//cout << "(" << i << "," << it->first << ")" << "\t";
 			}
 			//cout << endl;
@@ -338,22 +279,39 @@ double struct_predict(Problem* prob, Param* param){
 				Float max_y = 0.0;
 				int index = -1;
 				for (vector<pair<Float, int>>::iterator it = x[i]->act_set->begin(); it != x[i]->act_set->end(); it++){
-					int j = it->second;
+                    int idx_ij = it->second;
+                    int j = x[i]->index[idx_ij];
+                    int idx_ji = xt[j]->rev_index_map.find(i)->second;
 					if (!taken[j] && (it->first > max_y)){
 						max_y = it->first;
 						index = j;
 					}
 				}
 				if (index == -1){
-					for (int j = 0; j < b; j++){
+					for (int t = 0; t < x[i]->K; t++){
+                        int j = x[i]->index[t];
 						if (!taken[j]){
 							index = j;
 							break;
 						}
 					}
 				}
+                if (index == -1){
+					for (int j = 0; j < b; j++){
+						if (!taken[j]){
+							index = j;
+							break;
+						}
+					}
+                }
+
 				taken[index] = true;
-				decoded += x[i]->c[index];
+                if (x[i]->rev_index_map.find(index) != x[i]->rev_index_map.end()){
+                    int index_ij = x[i]->rev_index_map.find(index)->second;
+    				decoded += x[i]->c[index_ij];
+                } else {
+                    decoded -= INFI;
+                }
 			}
             decoded *= -2;
 			delete row_index;
@@ -367,15 +325,15 @@ double struct_predict(Problem* prob, Param* param){
 		cout << "iter=" << iter;
 		//cout << ", recall_rate=" << recall_rate/(a+b);
 		cout << ", act_size=" << act_size_sum/(a+b);
-		//cout << ", ever_nnz_size=" << ever_nnz_size_sum/(a+b);
-		cout << ", cost=" << cost;
+		cout << ", ever_nnz_size=" << ever_nnz_size_sum/(a+b);
+		cout << ", dual_obj=" << dual_obj;
+        cout << ", cost=" << cost;
         cout << ", infea=" << infea;
         cout << ", best_decoded=" << best_decoded;
-		cout << ", msg_sum=" << msg_sum;
 		cout << ", msg_delta=" << msg_delta;
         //cout << ", search=" << stats->uni_search_time;
-		//cout << ", subsolve=" << stats->uni_subsolve_time;
-		//cout << ", maintain=" << stats->maintain_time;
+		cout << ", subsolve=" << stats->uni_subsolve_time;
+		cout << ", maintain=" << stats->maintain_time;
 		cout << endl;
 		if (infea < 1e-5){
 			break;

@@ -82,8 +82,8 @@ void multiply(vector<vec_t> &W, vector<vec_t> &H, vector<vec_t> &R){
 
 
 void mul_print(vector<vec_t> &W, vector<vec_t> &H){
-	int height = W.size();
-	int width = H.size();
+	int height = 3;
+	int width = 3;
 	double temp = 0;
 	ofstream fout;
 	fout.open("result");
@@ -94,7 +94,11 @@ void mul_print(vector<vec_t> &W, vector<vec_t> &H){
 		//int n_index = 0;
 		for(int j = 0; j < width; j++){
 			temp = dot_product(W[i], H[j]);
-			fout << temp << " ";
+            if (j != 0){
+                fout << " ";
+            }
+			//fout << -temp;
+			fout << j << ":" << -temp;
 		}
 		fout << endl;
 		if(i % 100 == 0) cout <<"processing line:" << i << endl;

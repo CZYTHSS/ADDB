@@ -135,9 +135,10 @@ class Problem{
 		Problem(){
 		};
 		Param* param;
-		int K;
 		int a,b; //used to store the size of the data matrix
 		vector<Float*> node_score_vecs; //store matrix from row & column direction
+        vector<int*> node_index_vecs;
+        int* size;
 		Problem(Param* _param) : param(_param) {}
 		virtual void construct_data(){
 			cerr << "NEED to implement construct_data() for this problem!" << endl;
@@ -164,7 +165,10 @@ class BipartiteMatchingProblem : public Problem{
 			//K = stoi(string(line));	//stoi changes string to an int.(it must starts with a digit. it could contain letter after digits, but they will be ignored. eg: 123gg -> 123; gg123 -> fault)
 			sscanf(line, "%d%d", &a, &b); // read in matrix row_number a 
 			//Float* c = new Float[K*K];	//c is the matrix from data file.
-			Float* c = new Float[a*b];	//c is the matrix from data file.
+			Float** c = new Float*[a+b];	//c is the matrix from data file.
+            int** index = new int*[a+b];
+            size = new int[a+b];
+            memset(size, 0, sizeof(int)*(a+b));
 			for (int i = 0; i < a; i++){
 				readLine(fin, line);
 				while (strlen(line) == 0){
@@ -172,26 +176,68 @@ class BipartiteMatchingProblem : public Problem{
 				}
 				string line_str(line); //transfer char* type line into string type line_str
 				vector<string> tokens = split(line_str, " ");
-				for (int j = 0; j < b; j++){
-					c[i*b+j] = stod(tokens[j]);
-				}
+                size[i] = tokens.size();
+                Float* c_i = new Float[size[i]];
+                int* index_i = new int[size[i]];
+                int count = 0;
+                for (auto it = tokens.begin(); it != tokens.end(); it++, count++){
+                    vector<string> idx_val = split(*it, ":");
+                    int j = stoi(idx_val[0]);
+                    Float c_ij = stod(idx_val[1])/(-2.0);
+                    index_i[count] = j;
+                    c_i[count] = c_ij;
+                    size[a+j]++;
+                }
+                index[i] = index_i;
+                c[i] = c_i;
 			}
+            for (int j = 0; j < b; j++){
+                index[a+j] = new int[size[a+j]];
+                c[a+j] = new Float[size[a+j]];
+                size[a+j] = 0;
+            }
+            for (int i = 0; i < a; i++){
+                int* index_i = index[i];
+                Float* c_i = c[i];
+                for (int s = 0; s < size[i]; s++){
+                    int j = index_i[s];
+                    Float c_ij = c_i[s];
+                    index[a+j][size[a+j]] = i;
+                    c[a+j][size[a+j]] = c_ij;
+                    size[a+j]++;
+                }
+            }
+            
+            //cout << "rows" << endl;
+            //for (int i = 0; i < a; i++){
+            //    cout << i << ":";
+            //    for (int s = 0; s < size[i]; s++){
+            //        cout << " (" << index[i][s] << "," << c[i][s] << ")";
+            //    }
+            //    cout << " size=" << size[i];
+            //    cout << endl;
+            //}
+            //
+            //cout << "cols" << endl;
+            //for (int j = 0; j < b; j++){
+            //    cout << j << ":";
+            //    for (int s = 0; s < size[a+j]; s++){
+            //        cout << " (" << index[a+j][s] << "," << c[a+j][s] << ")";
+            //    }
+            //    cout << " size=" << size[a+j];
+            //    cout << endl;
+            //}
+
 			fin.close();
 
 			//node_score_vecs store the c matrix twice. From 0 to (a-1) it stores the matrix based on rows, a to (a+b-1) based on columns
 			for (int i = 0; i < a; i++){
-				Float* c_i = new Float[b];
-				for (int j = 0; j < b; j++){
-					c_i[j] = -c[i*b+j]/2.0;
-				}
-				node_score_vecs.push_back(c_i);
+				node_score_vecs.push_back(c[i]);
+                node_index_vecs.push_back(index[i]);
 			}
 			for (int j = 0; j < b; j++){
-				Float* c_j = new Float[a];
-				for (int i = 0; i < a; i++){
-					c_j[i] = -c[i*a+j]/2.0;
-				}
-				node_score_vecs.push_back(c_j);
+				node_score_vecs.push_back(c[a+j]);
+                node_index_vecs.push_back(index[a+j]);
 			}
 		}
 };
