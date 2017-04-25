@@ -76,7 +76,8 @@ disp(b-b)
 
 if nargin<2
     maxcost=min(1e16,max(max(costMat)));
-    resolution=eps(maxcost);
+    resolution=1e-3;
+    fprintf('resolution=%f', resolution);
 end
 % Prepare working data
 [rdim,cdim] = size(costMat);
@@ -144,6 +145,7 @@ end
 
 % Augmenting reduction of unassigned rows
 loopcnt = 0;
+tic;
 while loopcnt < 2
     loopcnt = loopcnt + 1;
     % scan all free rows
@@ -180,6 +182,7 @@ while loopcnt < 2
                 % continue augmenting path i - j1 with i0.
                 free(k)=i0;
                 k=k-1;
+                disp([usubmin, umin, resolution]);
             else
                 % no further augmenting reduction possible
                 % store i0 in list of free rows for next phase.
@@ -190,6 +193,7 @@ while loopcnt < 2
     end
 end
 
+fprintf('numfree=%d', numfree);
 % Augmentation Phase
 % augment solution for each free rows
 for f=1:numfree

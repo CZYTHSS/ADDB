@@ -107,7 +107,7 @@ class AFactor: public Factor{
             int act_count = 0;
             
             vector<pair<double, int>>* new_x = solve_simplex_full(c, msg_heap, sorted_c, K, tight, rho);
-
+            
             for (auto it = act_set->begin(); it!= act_set->end(); it++){
                 x[it->second] = 0.0;
             }
@@ -128,6 +128,7 @@ class AFactor: public Factor{
                 if (!msg_heap->hasKey(it->second)){
                     dual_obj -= it->first*c[it->second];
                 }
+                dual_obj += rho/2.0*it->first*it->first;
             }
             return dual_obj;
         }

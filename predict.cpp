@@ -120,15 +120,16 @@ double struct_predict(Problem* prob, Param* param){
     bool agd = param->agd;
 	while (iter++ < param->max_iter){
 		stats->maintain_time -= get_current_time(); 
-		//random_shuffle(indices, indices+K*2);
+		random_shuffle(indices, indices+a+b);
 		stats->maintain_time += get_current_time(); 
 		Float act_size_sum = 0;
 		Float ever_nnz_size_sum = 0;
         double old_lambda = lambda;
         lambda = (1.0+sqrt(1.0+4*lambda*lambda))/2;
         gamma = (1.0-old_lambda)/lambda;
-		for (int k = 0; k < a+b; k++){
-			if (k < a){
+		for (int kk = 0; kk < a+b; kk++){
+			int k = indices[kk];
+            if (k < a){
 				int i = k;
 				AFactor* node = x[i];		// the i th row of permutation matrix P.
 
@@ -261,7 +262,7 @@ double struct_predict(Problem* prob, Param* param){
 			}
 			//cout << endl;
 		}
-		if (iter % 50 == 0){
+		if (iter % 10 == 0){
 			memset(taken, false, sizeof(bool)*b);
 			Float decoded = 0.0;
 			int* row_index = new int[a];
@@ -335,6 +336,14 @@ double struct_predict(Problem* prob, Param* param){
 		cout << ", subsolve=" << stats->uni_subsolve_time;
 		cout << ", maintain=" << stats->maintain_time;
 		cout << endl;
+        //if (infea < 1e-3){
+        //    for (int i = 0; i < a; i++){
+        //        x[i]->rho *= 0.99;
+        //    }
+        //    for (int j = 0; j < b; j++){
+        //        xt[j]->rho *= 0.99;
+        //    }
+        //}
 		if (infea < 1e-5){
 			break;
 		}

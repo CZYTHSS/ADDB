@@ -82,8 +82,8 @@ void multiply(vector<vec_t> &W, vector<vec_t> &H, vector<vec_t> &R){
 
 
 void mul_print(vector<vec_t> &W, vector<vec_t> &H){
-	int height = 3;
-	int width = 3;
+	int height = 500;
+	int width = 500;
 	double temp = 0;
 	ofstream fout;
 	fout.open("result");
