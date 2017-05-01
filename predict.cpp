@@ -314,7 +314,7 @@ double struct_predict(Problem* prob, Param* param){
                     decoded -= INFI;
                 }
 			}
-            decoded *= -2;
+            decoded *= -1;
 			delete row_index;
 			if (decoded < best_decoded){
 				best_decoded = decoded;

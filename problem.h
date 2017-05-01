@@ -183,7 +183,7 @@ class BipartiteMatchingProblem : public Problem{
                 for (auto it = tokens.begin(); it != tokens.end(); it++, count++){
                     vector<string> idx_val = split(*it, ":");
                     int j = stoi(idx_val[0]);
-                    Float c_ij = stod(idx_val[1])/(-2.0);
+                    Float c_ij = stod(idx_val[1])/(-1.0);
                     index_i[count] = j;
                     c_i[count] = c_ij;
                     size[a+j]++;
@@ -201,7 +201,7 @@ class BipartiteMatchingProblem : public Problem{
                 Float* c_i = c[i];
                 for (int s = 0; s < size[i]; s++){
                     int j = index_i[s];
-                    Float c_ij = c_i[s];
+                    Float c_ij = 0.0;
                     index[a+j][size[a+j]] = i;
                     c[a+j][size[a+j]] = c_ij;
                     size[a+j]++;

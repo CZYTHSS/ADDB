@@ -4,6 +4,7 @@ using namespace std;
 #include <iostream>
 #include <omp.h>
 #include <fstream>
+#include <algorithm>
 
 typedef vector<double> vec_t;
 typedef vector<vec_t> mat_t;
@@ -82,8 +83,15 @@ void multiply(vector<vec_t> &W, vector<vec_t> &H, vector<vec_t> &R){
 
 
 void mul_print(vector<vec_t> &W, vector<vec_t> &H){
-	int height = 500;
-	int width = 500;
+	int height = W.size();
+	int width = H.size();
+
+	//this part is for the purpose to make a median size matrix(100-200)
+	height = 100;
+	width = 200;
+	//change height and width to the target size
+	
+
 	double temp = 0;
 	ofstream fout;
 	fout.open("result");
@@ -94,18 +102,66 @@ void mul_print(vector<vec_t> &W, vector<vec_t> &H){
 		//int n_index = 0;
 		for(int j = 0; j < width; j++){
 			temp = dot_product(W[i], H[j]);
-            if (j != 0){
-                fout << " ";
-            }
-			//fout << -temp;
-			fout << j << ":" << -temp;
+			fout << temp << " ";
 		}
 		fout << endl;
-		if(i % 100 == 0) cout <<"processing line:" << i << endl;
+		if(i % 1 == 0) cout <<"processing line:" << i << endl;
 	}
 	fout.close();
 	return;
 }
+
+void mul_sort_print(vector<vec_t> &W, vector<vec_t> &H){
+	int height = 5000;
+	int width = 5000;
+	pair<double, int> temp;		//use pair to store every entry. value first, index second
+	vector<pair<double, int>> row;
+	vector<pair<int, double>> irow;
+	//this part is for the purpose to make a median size matrix(100-200)
+//	height = 10;
+	//width = 1000;
+	//change height and width to the target size
+	
+	int output_height = height;
+	int output_width = 5000;	// the actual size of the output matrix.
+	
+
+
+	ofstream fout;
+	fout.open("result");
+	fout << width << " " << height << endl;
+	
+	//#pragma omp parallel for
+	for(int j = 0; j < width; j++){
+		//int n_index = 0;
+		for(int i = 0; i < height; i++){
+			double value = dot_product(W[i], H[j]);
+			temp = make_pair(value, i);
+			row.push_back(temp);
+			//fout << temp << " ";
+		}
+		nth_element(row.begin(), row.begin()+output_width, row.end(), greater<pair<double, int>>());
+		for(int k = 0; k < output_width; k++){
+            irow.push_back(make_pair(row[k].second, row[k].first));
+        }
+        sort(irow.begin(), irow.end(), less<pair<int, double>>());
+		for(int k = 0; k < output_width; k++){
+			if (k != 0) {
+				fout << " ";
+			}
+			fout << irow[k].first << ":" << irow[k].second;
+		}
+		fout << endl;
+		if (j % 100 == 0){
+            cout << "j=" << j << endl;
+        }
+        row.clear();
+        irow.clear();
+	}
+	fout.close();
+	return;
+}
+
 
 int main(){
 
@@ -136,8 +192,9 @@ int main(){
 	//cerr << "W:" << W.size()<<" "<< W[0].size();
 	//cerr << "H:" << H.size()<<" "<< H[0].size();
 	
-	mul_print(W,H);
+	mul_sort_print(W,H);
 	
 	return 0;
 
 }
+
