@@ -8,7 +8,6 @@ function [rowsol, cost, u, v, c, A] = runLAPJV(datafile)
     end
     A = fscanf(fin, format, [K Inf]);
     size(A)
-    A = -A;
     tic;
     [rowsol, cost, v, u, c] = lapjv(A);
     cost

@@ -348,6 +348,11 @@ inline vector<pair<Float, int>>* solve_simplex_full(Float* c, IndexedHeap* msg_h
 
 // min_{\|y\|_1 = 1 and y >= 0} \| y - b\|_2^2
 inline void solve_simplex(int n, Float* y, Float* b){
+    //cout << "b:";
+    //for (int i = 0; i < n; i++){
+    //    cout << b[i] << " ";
+    //}
+    //cout << endl;
 	int* index = new int[n];
 	for (int i = 0; i < n; i++)
 		index[i] = i;
@@ -362,16 +367,23 @@ inline void solve_simplex(int n, Float* y, Float* b){
 		if (/*b[index[i]] >= 0 &&*/ b[index[i]] >= t){
 			//feasible	
 
-			for (int j = 0; j < n; j++){
+			for (int j = 0; j <= i; j++){
 				y[index[j]] = b[index[j]] - t;
-				if (y[index[j]] < 0.0)
-					y[index[j]] = 0;
-				assert(y[index[j]] <= 1 + 1e-6);
+				//assert(y[index[j]] <= 1 + 1e-7);
+				//assert(y[index[j]] >= -1e-7);
 			}
+            for (int j = i+1; j < n; j++){
+                y[index[j]] = 0.0;
+            }
 			break;
 		}
 		sum -= b[index[i]];
 	}
+    //cout << "y:";
+    //for (int i = 0; i < n; i++){
+    //    cout << y[i] << " ";
+    //}
+    //cout << endl;
 	delete[] index;
 }
 

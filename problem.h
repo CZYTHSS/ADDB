@@ -139,6 +139,7 @@ class Problem{
 		vector<Float*> node_score_vecs; //store matrix from row & column direction
         vector<int*> node_index_vecs;
         int* size;
+        Float min_c, max_c;
 		Problem(Param* _param) : param(_param) {}
 		virtual void construct_data(){
 			cerr << "NEED to implement construct_data() for this problem!" << endl;
@@ -169,6 +170,8 @@ class BipartiteMatchingProblem : public Problem{
             int** index = new int*[a+b];
             size = new int[a+b];
             memset(size, 0, sizeof(int)*(a+b));
+            max_c = -1e100;
+            min_c = 1e100;
 			for (int i = 0; i < a; i++){
 				readLine(fin, line);
 				while (strlen(line) == 0){
@@ -176,48 +179,30 @@ class BipartiteMatchingProblem : public Problem{
 				}
 				string line_str(line); //transfer char* type line into string type line_str
 				vector<string> tokens = split(line_str, " ");
-                size[i] = tokens.size();
-                Float* c_i = new Float[size[i]];
-                int* index_i = new int[size[i]];
+                Float* c_i = new Float[b];
                 int count = 0;
+                Float mean = 0.5;
                 for (auto it = tokens.begin(); it != tokens.end(); it++, count++){
-                    vector<string> idx_val = split(*it, ":");
-                    int j = stoi(idx_val[0]);
-                    Float c_ij = stod(idx_val[1])/(-1.0);
-                    index_i[count] = j;
-                    c_i[count] = c_ij;
-                    size[a+j]++;
+                    c_i[count] = stod(*it);
+                    if (c_i[count] > max_c){
+                        max_c = c_i[count];
+                    }
+                    if (c_i[count] < min_c){
+                        min_c = c_i[count];
+                    }
                 }
-                index[i] = index_i;
                 c[i] = c_i;
 			}
-            for (int j = 0; j < b; j++){
-                index[a+j] = new int[size[a+j]];
-                c[a+j] = new Float[size[a+j]];
-                size[a+j] = 0;
-            }
-            for (int i = 0; i < a; i++){
-                int* index_i = index[i];
-                Float* c_i = c[i];
-                for (int s = 0; s < size[i]; s++){
-                    int j = index_i[s];
-                    Float c_ij = 0.0;
-                    index[a+j][size[a+j]] = i;
-                    c[a+j][size[a+j]] = c_ij;
-                    size[a+j]++;
-                }
-            }
-            
+         
             //cout << "rows" << endl;
             //for (int i = 0; i < a; i++){
             //    cout << i << ":";
-            //    for (int s = 0; s < size[i]; s++){
-            //        cout << " (" << index[i][s] << "," << c[i][s] << ")";
+            //    for (int s = 0; s < b; s++){
+            //        cout << c[i][s] << " ";
             //    }
-            //    cout << " size=" << size[i];
             //    cout << endl;
             //}
-            //
+            
             //cout << "cols" << endl;
             //for (int j = 0; j < b; j++){
             //    cout << j << ":";
@@ -233,11 +218,6 @@ class BipartiteMatchingProblem : public Problem{
 			//node_score_vecs store the c matrix twice. From 0 to (a-1) it stores the matrix based on rows, a to (a+b-1) based on columns
 			for (int i = 0; i < a; i++){
 				node_score_vecs.push_back(c[i]);
-                node_index_vecs.push_back(index[i]);
-			}
-			for (int j = 0; j < b; j++){
-				node_score_vecs.push_back(c[a+j]);
-                node_index_vecs.push_back(index[a+j]);
 			}
 		}
 };

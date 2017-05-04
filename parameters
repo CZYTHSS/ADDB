@@ -1,0 +1,2 @@
+./predict -s 2 -p bipartite -e 1e-4 -o 1.25e-3 -m 100000 -a 150_150.jv
+./predict -s 2 -p bipartite -e 1e-4 -o 0.6e-3 -m 100000 -a 500_500.jv
