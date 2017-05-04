@@ -95,174 +95,89 @@ double struct_predict(Problem* prob, Param* param){
 	int b = prob->b;	//b stands for the width of the data matrix
 	cout << "constructing factors...";
 	vector<AFactor*> x;	//x is the permutation matrix sliced depend on rows.
+    Float* sum = new Float[b];
+    Float* msg = new Float[b];
+    Float* msg_acc = new Float[b];
+    for (int j = 0; j < b; j++){
+        sum[j] = -1.0;
+    }
+    memset(msg, 0, sizeof(Float)*b);
+    memset(msg_acc, 0, sizeof(Float)*b);
 	for (int i = 0; i < a; i++){
-		AFactor* x_i = new AFactor(b, prob->size[i], prob->node_index_vecs[i], prob->node_score_vecs[i], param, true);
+		AFactor* x_i = new AFactor(b, prob->node_score_vecs[i], param, sum, msg);
 		x.push_back(x_i);
-	}
-	vector<AFactor*> xt;	//xt is the transpose matrix of x. a permutation matrix slieced depend on columns;
-	for (int j = 0; j < b; j++){
-		AFactor* xt_j = new AFactor(a, prob->size[a+j], prob->node_index_vecs[a+j], prob->node_score_vecs[a+j], param, (a==b));
-		xt.push_back(xt_j);
 	}
 	cout << "done" << endl;
 
 	int iter = 0;
 	Float rho = param->rho;    //rho = p, an coefficient.
 	Float eta = param->eta; 
-	int* indices = new int[a+b];
-	for (int i = 0; i < a+b; i++){
+	int* indices = new int[a];
+	for (int i = 0; i < a; i++){
 		indices[i] = i;
 	}
 	bool* taken = new bool[b]; //need to check the meaning again later 
 	Float best_decoded = 1e100;	//the result of matrix C dot product P(or X)
     double gamma = 0.0;
+    double theta = 1.0;
     double lambda = 0.0;
     bool agd = param->agd;
 	while (iter++ < param->max_iter){
 		stats->maintain_time -= get_current_time(); 
-		random_shuffle(indices, indices+a+b);
+		random_shuffle(indices, indices+a);
 		stats->maintain_time += get_current_time(); 
 		Float act_size_sum = 0;
 		Float ever_nnz_size_sum = 0;
         double old_lambda = lambda;
         lambda = (1.0+sqrt(1.0+4*lambda*lambda))/2;
         gamma = (1.0-old_lambda)/lambda;
-		for (int kk = 0; kk < a+b; kk++){
-			int k = indices[kk];
-            if (k < a){
-				int i = k;
-				AFactor* node = x[i];		// the i th row of permutation matrix P.
+        /*for (int j = 0; j < b; j++){
+        `    msg[j] = (1.0-theta) * msg[j] + theta*msg[j];
+        }*/
+		for (int kk = 0; kk < a; kk++){
+			int i = indices[kk];
+            AFactor* node = x[i];
 
-				//given active set, solve subproblem
-				node->subsolve();
+            //given active set, solve subproblem
+            node->subsolve();
 
-                stats->maintain_time -= get_current_time(); 
-				act_size_sum += node->act_set->size();
-				ever_nnz_size_sum += node->msg_heap->size();
-				stats->maintain_time += get_current_time(); 
-			} else {
-				int j = k - a;
-				AFactor* node = xt[j];
-                
-				node->subsolve();
-				
-                stats->maintain_time -= get_current_time(); 
-				act_size_sum += node->act_set->size();
-				ever_nnz_size_sum += node->msg_heap->size();
-				stats->maintain_time += get_current_time(); 
-			}
+            stats->maintain_time -= get_current_time(); 
+            stats->maintain_time += get_current_time(); 
 		}
 		// msg[i] = (x[i][j] - xt[j][i] + mu[i][j])
 		// msg[i] = (x[i][j] - xt[j][i] + mu[i][j])
         stats->maintain_time -= get_current_time(); 
         Float msg_delta = 0.0;
-		for (int i = 0; i < a; i++){
-			for (vector<pair<Float, int>>::iterator it = x[i]->act_set->begin(); it != x[i]->act_set->end(); it++){
-				int idx_ij = it->second;
-                int j = x[i]->index[idx_ij];
-                int idx_ji = xt[j]->rev_index_map.find(i)->second;
-                double delta = eta*(xt[j]->x[idx_ji]-it->first);
-                if (abs(delta) < 1e-20){
-                    continue;
-                }
-                msg_delta += abs(delta);
-                double msgx_ij, msgxt_ji;
-                if (!x[i]->msg_heap->hasKey(idx_ij)){
-                    msgx_ij = x[i]->c[idx_ij] + delta;
-                } else {
-                    msgx_ij = x[i]->msg_heap->get_value(idx_ij) + delta;
-                }
-                if (!xt[j]->msg_heap->hasKey(idx_ji)){
-                    msgxt_ji = xt[j]->c[idx_ji] - delta;
-                } else {
-                    msgxt_ji = xt[j]->msg_heap->get_value(idx_ji) - delta;
-                }
-                
-                if (agd){
-                    //cout << "i=" << i << ", j=" << j << ", gamma=" << gamma << ", next_Y=" << (x[i]->yacc[j]*gamma + (1.0-gamma)*msgx_ij) << ", y=" << msgx_ij << endl;
-                    x[i]->msg_heap->update(idx_ij, x[i]->yacc[idx_ij]*gamma + (1.0-gamma)*msgx_ij);
-                    //cout << "j=" << j << ", i=" << i << ", gamma=" << gamma << ", next_Y=" << (xt[j]->yacc[i]*gamma + (1.0-gamma)*msgxt_ji) << ", y=" << msgxt_ji << endl;
-                    xt[j]->msg_heap->update(idx_ji, xt[j]->yacc[idx_ji]*gamma + (1.0-gamma)*msgxt_ji);
-                    x[i]->yacc[idx_ij] = msgx_ij;
-                    xt[j]->yacc[idx_ji] = msgxt_ji;
-                } else {
-                    //cout << "updating:" << "i=" << i << ", j=" << idx_ij << ", delta=" << delta<< endl;
-                    x[i]->msg_heap->update(idx_ij, msgx_ij);
-                    //cout << "updating:" << "j=" << j << ", i=" << idx_ji << ", delta=" << (-delta) << endl;
-                    xt[j]->msg_heap->update(idx_ji, msgxt_ji);
-                }
-			}
-		}
-		for (int j = 0; j < b; j++){
-			for (vector<pair<Float, int>>::iterator it = xt[j]->act_set->begin(); it != xt[j]->act_set->end(); it++){
-				int idx_ji = it->second;
-                int i = xt[j]->index[idx_ji];
-                int idx_ij = x[i]->rev_index_map.find(j)->second;
-                if (abs(x[i]->x[idx_ij]) > 1e-20){
-                    continue;
-                }
-                double delta = eta*(it->first-x[i]->x[idx_ij]);
-                if (abs(delta) < 1e-20){
-                    continue;
-                }
-                msg_delta += abs(delta);
-                double msgx_ij, msgxt_ji;
-                if (!x[i]->msg_heap->hasKey(idx_ij)){
-                    msgx_ij = x[i]->c[idx_ij] + delta;
-                } else {
-                    msgx_ij = x[i]->msg_heap->get_value(idx_ij) + delta;
-                }
-                if (!xt[j]->msg_heap->hasKey(idx_ji)){
-                    msgxt_ji = xt[j]->c[idx_ji] - delta;
-                } else {
-                    msgxt_ji = xt[j]->msg_heap->get_value(idx_ji) - delta;
-                }
-                
-                if (agd){
-                    //cout << "i=" << i << ", j=" << j << ", gamma=" << gamma << ", next_Y=" << (x[i]->yacc[j]*gamma + (1.0-gamma)*msgx_ij) << ", y=" << msgx_ij << endl;
-                    x[i]->msg_heap->update(idx_ij, x[i]->yacc[idx_ij]*gamma + (1.0-gamma)*msgx_ij);
-                    //cout << "j=" << j << ", i=" << i << ", gamma=" << gamma << ", next_Y=" << (xt[j]->yacc[i]*gamma + (1.0-gamma)*msgxt_ji) << ", y=" << msgxt_ji << endl;
-                    xt[j]->msg_heap->update(idx_ji, xt[j]->yacc[idx_ji]*gamma + (1.0-gamma)*msgxt_ji);
-                    x[i]->yacc[idx_ij] = msgx_ij;
-                    xt[j]->yacc[idx_ji] = msgxt_ji;
-                } else {
-                    //cout << "updating:" << "i=" << i << ", j=" << idx_ij << ", delta=" << delta << endl;
-                    x[i]->msg_heap->update(idx_ij, msgx_ij);
-                    //cout << "updating:" << "j=" << j << ", i=" << idx_ji << ", delta=" << (-delta) << endl;
-                    xt[j]->msg_heap->update(idx_ji, msgxt_ji);
-                }
+        for (int j = 0; j < b; j++){
+            Float delta = (eta*sum[j]);
+            if (agd){
+                //x[i]->msg_heap->update(idx_ij, x[i]->yacc[idx_ij]*gamma + (1.0-gamma)*msgx_ij);
+                //xt[j]->msg_heap->update(idx_ji, xt[j]->yacc[idx_ji]*gamma + (1.0-gamma)*msgxt_ji);
+                //x[i]->yacc[idx_ij] = msgx_ij;
+                //xt[j]->yacc[idx_ji] = msgxt_ji;
+                Float last_msg_acc = msg_acc[j];
+                msg_acc[j] = msg[j] + delta;
+                msg[j] = gamma*last_msg_acc + (1.0-gamma)*msg_acc[j];
+                //msg[j]+= delta;
+                //msg_acc[j] = (1-theta)*msg_acc[j] + theta*msg[j];
+            } else {
+                msg[j] += delta;
+                //x[i]->msg_heap->update(idx_ij, msgx_ij);
+                //xt[j]->msg_heap->update(idx_ji, msgxt_ji);
             }
-		}
+        }
         
 		Float cost = 0.0, infea = 0.0, dual_obj = 0.0;
 		for (int i = 0; i < a; i++){
-            dual_obj += x[i]->dual_obj();
-			for (vector<pair<Float, int>>::iterator it = x[i]->act_set->begin(); it != x[i]->act_set->end(); it++){
-				int idx_ij = it->second;
-                int j = x[i]->index[idx_ij];
-                int idx_ji = xt[j]->rev_index_map.find(i)->second;
-				cost += it->first * x[i]->c[idx_ij];
-                //cout << "i=" << i << ", j=" << j << ", infea=" << abs(xt[j]->x[i] - it->first) << endl;
-				infea += abs(xt[j]->x[idx_ji] - it->first);
-				//cout << "(" << j << "," << it->first << ")" << "\t";
+			for (int j = 0; j < b; j++){
+				cost += x[i]->x[j] * x[i]->c[j];
 			}
-            //cout << endl;
 		}
+        for (int j = 0; j < b; j++){
+            infea += abs(sum[j]);
+        }
 
-		for (int j = 0; j < b; j++){
-            dual_obj += xt[j]->dual_obj();
-			for (vector<pair<Float, int>>::iterator it = xt[j]->act_set->begin(); it != xt[j]->act_set->end(); it++){
-				int idx_ji = it->second;
-                int i = xt[j]->index[idx_ji];
-                int idx_ij = x[i]->rev_index_map.find(j)->second;
-				cost += it->first * xt[j]->c[idx_ji];
-                //cout << "i=" << i << ", j=" << j << ", infea=" << abs(it->first-x[i]->x[j]) << endl;
-				infea += abs(it->first - x[i]->x[idx_ij]);
-				//cout << "(" << i << "," << it->first << ")" << "\t";
-			}
-			//cout << endl;
-		}
-		if (iter % 10 == 0){
+		if (iter % 1 == 0){
 			memset(taken, false, sizeof(bool)*b);
 			Float decoded = 0.0;
 			int* row_index = new int[a];
@@ -271,67 +186,46 @@ double struct_predict(Problem* prob, Param* param){
 			}
 			random_shuffle(row_index, row_index+a);
 			//random_shuffle(indices, indices+a+b);
-				
+			ofstream fout("pred");
 			for (int k = 0; k < a; k++){
 				/*if (indices[k] >= a){
 					continue;
 				}*/
 				int i = row_index[k];
-				Float max_y = 0.0;
+				Float max_y = -1.0;
 				int index = -1;
-				for (vector<pair<Float, int>>::iterator it = x[i]->act_set->begin(); it != x[i]->act_set->end(); it++){
-                    int idx_ij = it->second;
-                    int j = x[i]->index[idx_ij];
-                    int idx_ji = xt[j]->rev_index_map.find(i)->second;
-					if (!taken[j] && (it->first > max_y)){
-						max_y = it->first;
+				for (int j = 0; j < b; j++){
+                    assert(x[i]->x[j] >= -1e-6);
+                    if (!taken[j] && (x[i]->x[j] > max_y)){
+						max_y = x[i]->x[j];
 						index = j;
 					}
 				}
-				if (index == -1){
-					for (int t = 0; t < x[i]->K; t++){
-                        int j = x[i]->index[t];
-						if (!taken[j]){
-							index = j;
-							break;
-						}
-					}
-				}
-                if (index == -1){
-					for (int j = 0; j < b; j++){
-						if (!taken[j]){
-							index = j;
-							break;
-						}
-					}
-                }
-
+                //cout << max_y << endl;
+                assert(index != -1);
 				taken[index] = true;
-                if (x[i]->rev_index_map.find(index) != x[i]->rev_index_map.end()){
-                    int index_ij = x[i]->rev_index_map.find(index)->second;
-    				decoded += x[i]->c[index_ij];
-                } else {
-                    decoded -= INFI;
-                }
+                Float c_ij = x[i]->c[index];
+                decoded += c_ij;
 			}
-            decoded *= -1;
+            fout.close();
 			delete row_index;
 			if (decoded < best_decoded){
 				best_decoded = decoded;
 			}
 		}
+        
 		stats->maintain_time += get_current_time(); 
 
 		////cout << endl;
 		cout << "iter=" << iter;
 		//cout << ", recall_rate=" << recall_rate/(a+b);
-		cout << ", act_size=" << act_size_sum/(a+b);
-		cout << ", ever_nnz_size=" << ever_nnz_size_sum/(a+b);
-		cout << ", dual_obj=" << dual_obj;
+		//cout << ", act_size=" << act_size_sum/(a+b);
+		//cout << ", ever_nnz_size=" << ever_nnz_size_sum/(a+b);
+		//cout << ", dual_obj=" << dual_obj;
         cout << ", cost=" << cost;
         cout << ", infea=" << infea;
         cout << ", best_decoded=" << best_decoded;
-		cout << ", msg_delta=" << msg_delta;
+		//cout << ", msg_delta=" << msg_delta;
         //cout << ", search=" << stats->uni_search_time;
 		cout << ", subsolve=" << stats->uni_subsolve_time;
 		cout << ", maintain=" << stats->maintain_time;
@@ -344,11 +238,11 @@ double struct_predict(Problem* prob, Param* param){
         //        xt[j]->rho *= 0.99;
         //    }
         //}
-		if (infea < 1e-5){
+		if (infea < 1e-7){
 			break;
 		}
+        //theta = (sqrt(theta*theta*theta*theta + 4 * theta * theta) - theta * theta)/2.0;
 	}
-	delete taken;
 	return 0;
 }
 

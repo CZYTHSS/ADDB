@@ -30,8 +30,8 @@ emd:
 	./predict -p bipartite -s 2 -o $(rho) -e $(eta) -m $(m) $(opt) $(test_file)
 
 lapjv:
-	$(eval test_file := 5000_5000.jv)
-	matlab -nodesktop -r "format long; runLAPJV('$(test_file)'); exit;" > 5000_5000.jvlog
+	$(eval test_file := 2000_2000.jv)
+	matlab -singleCompThread -nodesktop -r "format long; runLAPJV('$(test_file)'); exit;" > 2000_2000.jvlog
 
 penguin-gm:
 	$(eval test_file := ../penguin-gm.h5.loguai2)

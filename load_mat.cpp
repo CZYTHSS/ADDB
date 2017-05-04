@@ -112,8 +112,8 @@ void mul_print(vector<vec_t> &W, vector<vec_t> &H){
 }
 
 void mul_sort_print(vector<vec_t> &W, vector<vec_t> &H){
-	int height = 5000;
-	int width = 5000;
+	int height = 150;
+	int width = 150;
 	pair<double, int> temp;		//use pair to store every entry. value first, index second
 	vector<pair<double, int>> row;
 	vector<pair<int, double>> irow;
@@ -123,7 +123,7 @@ void mul_sort_print(vector<vec_t> &W, vector<vec_t> &H){
 	//change height and width to the target size
 	
 	int output_height = height;
-	int output_width = 5000;	// the actual size of the output matrix.
+	int output_width = 150;	// the actual size of the output matrix.
 	
 
 
@@ -135,28 +135,31 @@ void mul_sort_print(vector<vec_t> &W, vector<vec_t> &H){
 	for(int j = 0; j < width; j++){
 		//int n_index = 0;
 		for(int i = 0; i < height; i++){
-			double value = dot_product(W[i], H[j]);
+			double value = dot_product(W[i], W[j]);
 			temp = make_pair(value, i);
 			row.push_back(temp);
-			//fout << temp << " ";
+            if (i != 0){
+                fout << " ";
+            }
+			fout << -value;
 		}
-		nth_element(row.begin(), row.begin()+output_width, row.end(), greater<pair<double, int>>());
-		for(int k = 0; k < output_width; k++){
-            irow.push_back(make_pair(row[k].second, row[k].first));
-        }
-        sort(irow.begin(), irow.end(), less<pair<int, double>>());
-		for(int k = 0; k < output_width; k++){
-			if (k != 0) {
-				fout << " ";
-			}
-			fout << irow[k].first << ":" << irow[k].second;
-		}
+		//nth_element(row.begin(), row.begin()+output_width, row.end(), greater<pair<double, int>>());
+		//for(int k = 0; k < output_width; k++){
+        //    irow.push_back(make_pair(row[k].second, row[k].first));
+        //}
+        //sort(irow.begin(), irow.end(), less<pair<int, double>>());
+		//for(int k = 0; k < output_width; k++){
+		//	if (k != 0) {
+		//		fout << " ";
+		//	}
+		//	fout << irow[k].first << ":" << irow[k].second;
+		//}
 		fout << endl;
 		if (j % 100 == 0){
             cout << "j=" << j << endl;
         }
         row.clear();
-        irow.clear();
+        //irow.clear();
 	}
 	fout.close();
 	return;
