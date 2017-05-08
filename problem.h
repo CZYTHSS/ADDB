@@ -137,8 +137,11 @@ class Problem{
 		Param* param;
 		int a,b; //used to store the size of the data matrix
 		vector<Float*> node_score_vecs; //store matrix from row & column direction
-        vector<int*> node_index_vecs;
-        int* size;
+        //vector<int*> node_index_vecs;
+        //int* size;
+        Float offset;
+        Float max_c;
+        Float upper = 1000.0;
 		Problem(Param* _param) : param(_param) {}
 		virtual void construct_data(){
 			cerr << "NEED to implement construct_data() for this problem!" << endl;
@@ -165,10 +168,11 @@ class BipartiteMatchingProblem : public Problem{
 			//K = stoi(string(line));	//stoi changes string to an int.(it must starts with a digit. it could contain letter after digits, but they will be ignored. eg: 123gg -> 123; gg123 -> fault)
 			sscanf(line, "%d%d", &a, &b); // read in matrix row_number a 
 			//Float* c = new Float[K*K];	//c is the matrix from data file.
-			Float** c = new Float*[a+b];	//c is the matrix from data file.
-            int** index = new int*[a+b];
-            size = new int[a+b];
-            memset(size, 0, sizeof(int)*(a+b));
+			Float** c = new Float*[a];	//c is the matrix from data file.
+            Float** ct = new Float*[b];
+            offset = 0.0;
+            max_c = -1e100;
+            Float* col_min = new Float[b];
 			for (int i = 0; i < a; i++){
 				readLine(fin, line);
 				while (strlen(line) == 0){
@@ -176,35 +180,38 @@ class BipartiteMatchingProblem : public Problem{
 				}
 				string line_str(line); //transfer char* type line into string type line_str
 				vector<string> tokens = split(line_str, " ");
-                size[i] = tokens.size();
-                Float* c_i = new Float[size[i]];
-                int* index_i = new int[size[i]];
-                int count = 0;
-                for (auto it = tokens.begin(); it != tokens.end(); it++, count++){
-                    vector<string> idx_val = split(*it, ":");
-                    int j = stoi(idx_val[0]);
-                    Float c_ij = stod(idx_val[1])/(-1.0);
-                    index_i[count] = j;
-                    c_i[count] = c_ij;
-                    size[a+j]++;
+                Float* c_i = new Float[b];
+                Float min = 1e100;
+                for (int j = 0; j < b; j++){
+                    Float c_ij = stod(tokens[j])/(-2.0);
+                    c_i[j] = c_ij;
+                    if (c_ij < min){
+                        min = c_ij;
+                    }
                 }
-                index[i] = index_i;
+                for (int j = 0; j < b; j++){
+                    c_i[j] -= min;
+                    if (c_i[j] < col_min[j]){
+                        col_min[j] = c_i[j];
+                    }
+                }
+                offset += min;
                 c[i] = c_i;
 			}
             for (int j = 0; j < b; j++){
-                index[a+j] = new int[size[a+j]];
-                c[a+j] = new Float[size[a+j]];
-                size[a+j] = 0;
+                for (int i = 0; i < a; i++){
+                    c[i][j] -= col_min[j];
+                    if (c[i][j] > max_c){
+                        max_c = c[i][j];
+                    }
+                }
+                offset += col_min[j];
             }
-            for (int i = 0; i < a; i++){
-                int* index_i = index[i];
-                Float* c_i = c[i];
-                for (int s = 0; s < size[i]; s++){
-                    int j = index_i[s];
-                    Float c_ij = 0.0;
-                    index[a+j][size[a+j]] = i;
-                    c[a+j][size[a+j]] = c_ij;
-                    size[a+j]++;
+            for (int j = 0; j < b; j++){
+                ct[j] = new Float[a];
+                for (int i = 0; i < a; i++){
+                    c[i][j]=c[i][j]/max_c*upper;
+                    ct[j][i] = c[i][j];
                 }
             }
             
@@ -233,11 +240,9 @@ class BipartiteMatchingProblem : public Problem{
 			//node_score_vecs store the c matrix twice. From 0 to (a-1) it stores the matrix based on rows, a to (a+b-1) based on columns
 			for (int i = 0; i < a; i++){
 				node_score_vecs.push_back(c[i]);
-                node_index_vecs.push_back(index[i]);
 			}
 			for (int j = 0; j < b; j++){
-				node_score_vecs.push_back(c[a+j]);
-                node_index_vecs.push_back(index[a+j]);
+				node_score_vecs.push_back(ct[j]);
 			}
 		}
 };

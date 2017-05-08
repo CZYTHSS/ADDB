@@ -280,7 +280,6 @@ inline vector<pair<Float, int>>* solve_simplex_full(Float* c, IndexedHeap* msg_h
         }
         cy[i].first /= rho;
         sum += cy[i].first;
-        //cout << "sum=" << sum << endl;
         t = (sum-1.0)/(i+1);
         l = (sum-1.0)/(i+1);
         r = cy[i].first;

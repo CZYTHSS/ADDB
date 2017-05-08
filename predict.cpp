@@ -96,12 +96,12 @@ double struct_predict(Problem* prob, Param* param){
 	cout << "constructing factors...";
 	vector<AFactor*> x;	//x is the permutation matrix sliced depend on rows.
 	for (int i = 0; i < a; i++){
-		AFactor* x_i = new AFactor(b, prob->size[i], prob->node_index_vecs[i], prob->node_score_vecs[i], param, true);
+		AFactor* x_i = new AFactor(b, prob->node_score_vecs[i], param, true);
 		x.push_back(x_i);
 	}
 	vector<AFactor*> xt;	//xt is the transpose matrix of x. a permutation matrix slieced depend on columns;
 	for (int j = 0; j < b; j++){
-		AFactor* xt_j = new AFactor(a, prob->size[a+j], prob->node_index_vecs[a+j], prob->node_score_vecs[a+j], param, (a==b));
+		AFactor* xt_j = new AFactor(a, prob->node_score_vecs[a+j], param, (a==b));
 		xt.push_back(xt_j);
 	}
 	cout << "done" << endl;
@@ -118,6 +118,10 @@ double struct_predict(Problem* prob, Param* param){
     double gamma = 0.0;
     double lambda = 0.0;
     bool agd = param->agd;
+    omp_lock_t* locks = new omp_lock_t[a+b];
+    for (int i = 0; i < a+b; i++){
+        omp_init_lock(&locks[i]);
+    }
 	while (iter++ < param->max_iter){
 		stats->maintain_time -= get_current_time(); 
 		random_shuffle(indices, indices+a+b);
@@ -127,6 +131,9 @@ double struct_predict(Problem* prob, Param* param){
         double old_lambda = lambda;
         lambda = (1.0+sqrt(1.0+4*lambda*lambda))/2;
         gamma = (1.0-old_lambda)/lambda;
+
+		stats->uni_subsolve_time -= get_current_time();
+        #pragma omp parallel for
 		for (int kk = 0; kk < a+b; kk++){
 			int k = indices[kk];
             if (k < a){
@@ -136,133 +143,140 @@ double struct_predict(Problem* prob, Param* param){
 				//given active set, solve subproblem
 				node->subsolve();
 
-                stats->maintain_time -= get_current_time(); 
+                //stats->maintain_time -= get_current_time(); 
+                #pragma omp atomic
 				act_size_sum += node->act_set->size();
-				ever_nnz_size_sum += node->msg_heap->size();
-				stats->maintain_time += get_current_time(); 
+				//ever_nnz_size_sum += node->msg_heap->size();
+				//stats->maintain_time += get_current_time(); 
 			} else {
 				int j = k - a;
 				AFactor* node = xt[j];
                 
 				node->subsolve();
 				
-                stats->maintain_time -= get_current_time(); 
+                //stats->maintain_time -= get_current_time(); 
+                #pragma omp atomic
 				act_size_sum += node->act_set->size();
-				ever_nnz_size_sum += node->msg_heap->size();
-				stats->maintain_time += get_current_time(); 
+				//ever_nnz_size_sum += node->msg_heap->size();
+				//stats->maintain_time += get_current_time(); 
 			}
 		}
+		stats->uni_subsolve_time += get_current_time();
 		// msg[i] = (x[i][j] - xt[j][i] + mu[i][j])
 		// msg[i] = (x[i][j] - xt[j][i] + mu[i][j])
-        stats->maintain_time -= get_current_time(); 
-        Float msg_delta = 0.0;
+        stats->maintain_time -= get_current_time();
+        #pragma omp parallel for
 		for (int i = 0; i < a; i++){
 			for (vector<pair<Float, int>>::iterator it = x[i]->act_set->begin(); it != x[i]->act_set->end(); it++){
-				int idx_ij = it->second;
-                int j = x[i]->index[idx_ij];
-                int idx_ji = xt[j]->rev_index_map.find(i)->second;
-                double delta = eta*(xt[j]->x[idx_ji]-it->first);
+				int j = it->second;
+                double delta = eta*(xt[j]->x[i]-it->first);
                 if (abs(delta) < 1e-20){
                     continue;
                 }
-                msg_delta += abs(delta);
                 double msgx_ij, msgxt_ji;
-                if (!x[i]->msg_heap->hasKey(idx_ij)){
-                    msgx_ij = x[i]->c[idx_ij] + delta;
+                if (!x[i]->msg_heap->hasKey(j)){
+                    msgx_ij = x[i]->c[j] + delta;
                 } else {
-                    msgx_ij = x[i]->msg_heap->get_value(idx_ij) + delta;
+                    msgx_ij = x[i]->msg_heap->get_value(j) + delta;
                 }
-                if (!xt[j]->msg_heap->hasKey(idx_ji)){
-                    msgxt_ji = xt[j]->c[idx_ji] - delta;
-                } else {
-                    msgxt_ji = xt[j]->msg_heap->get_value(idx_ji) - delta;
-                }
-                
                 if (agd){
-                    //cout << "i=" << i << ", j=" << j << ", gamma=" << gamma << ", next_Y=" << (x[i]->yacc[j]*gamma + (1.0-gamma)*msgx_ij) << ", y=" << msgx_ij << endl;
-                    x[i]->msg_heap->update(idx_ij, x[i]->yacc[idx_ij]*gamma + (1.0-gamma)*msgx_ij);
-                    //cout << "j=" << j << ", i=" << i << ", gamma=" << gamma << ", next_Y=" << (xt[j]->yacc[i]*gamma + (1.0-gamma)*msgxt_ji) << ", y=" << msgxt_ji << endl;
-                    xt[j]->msg_heap->update(idx_ji, xt[j]->yacc[idx_ji]*gamma + (1.0-gamma)*msgxt_ji);
-                    x[i]->yacc[idx_ij] = msgx_ij;
-                    xt[j]->yacc[idx_ji] = msgxt_ji;
+                    x[i]->msg_heap->update(j, x[i]->yacc[j]*gamma + (1.0-gamma)*msgx_ij);
+                    x[i]->yacc[j] = msgx_ij;
                 } else {
-                    //cout << "updating:" << "i=" << i << ", j=" << idx_ij << ", delta=" << delta<< endl;
-                    x[i]->msg_heap->update(idx_ij, msgx_ij);
-                    //cout << "updating:" << "j=" << j << ", i=" << idx_ji << ", delta=" << (-delta) << endl;
-                    xt[j]->msg_heap->update(idx_ji, msgxt_ji);
+                    x[i]->msg_heap->update(j, msgx_ij);
                 }
+
+                omp_set_lock(&locks[a+j]);
+                if (!xt[j]->msg_heap->hasKey(i)){
+                    msgxt_ji = xt[j]->c[i] - delta;
+                } else {
+                    msgxt_ji = xt[j]->msg_heap->get_value(i) - delta;
+                }
+                if (agd){
+                    xt[j]->msg_heap->update(i, xt[j]->yacc[i]*gamma + (1.0-gamma)*msgxt_ji);
+                    xt[j]->yacc[i] = msgxt_ji;
+                } else {
+                    xt[j]->msg_heap->update(i, msgxt_ji);
+                }
+                omp_unset_lock(&locks[a+j]);
 			}
 		}
+        #pragma omp parallel for
 		for (int j = 0; j < b; j++){
 			for (vector<pair<Float, int>>::iterator it = xt[j]->act_set->begin(); it != xt[j]->act_set->end(); it++){
-				int idx_ji = it->second;
-                int i = xt[j]->index[idx_ji];
-                int idx_ij = x[i]->rev_index_map.find(j)->second;
-                if (abs(x[i]->x[idx_ij]) > 1e-20){
+                int i = it->second;
+                if (abs(x[i]->x[j]) > 1e-20){
                     continue;
                 }
-                double delta = eta*(it->first-x[i]->x[idx_ij]);
+                double delta = eta*(it->first-x[i]->x[j]);
                 if (abs(delta) < 1e-20){
                     continue;
                 }
-                msg_delta += abs(delta);
                 double msgx_ij, msgxt_ji;
-                if (!x[i]->msg_heap->hasKey(idx_ij)){
-                    msgx_ij = x[i]->c[idx_ij] + delta;
+                if (!xt[j]->msg_heap->hasKey(i)){
+                    msgxt_ji = xt[j]->c[i] - delta;
                 } else {
-                    msgx_ij = x[i]->msg_heap->get_value(idx_ij) + delta;
+                    msgxt_ji = xt[j]->msg_heap->get_value(i) - delta;
                 }
-                if (!xt[j]->msg_heap->hasKey(idx_ji)){
-                    msgxt_ji = xt[j]->c[idx_ji] - delta;
-                } else {
-                    msgxt_ji = xt[j]->msg_heap->get_value(idx_ji) - delta;
-                }
-                
                 if (agd){
-                    //cout << "i=" << i << ", j=" << j << ", gamma=" << gamma << ", next_Y=" << (x[i]->yacc[j]*gamma + (1.0-gamma)*msgx_ij) << ", y=" << msgx_ij << endl;
-                    x[i]->msg_heap->update(idx_ij, x[i]->yacc[idx_ij]*gamma + (1.0-gamma)*msgx_ij);
-                    //cout << "j=" << j << ", i=" << i << ", gamma=" << gamma << ", next_Y=" << (xt[j]->yacc[i]*gamma + (1.0-gamma)*msgxt_ji) << ", y=" << msgxt_ji << endl;
-                    xt[j]->msg_heap->update(idx_ji, xt[j]->yacc[idx_ji]*gamma + (1.0-gamma)*msgxt_ji);
-                    x[i]->yacc[idx_ij] = msgx_ij;
-                    xt[j]->yacc[idx_ji] = msgxt_ji;
+                    xt[j]->msg_heap->update(i, xt[j]->yacc[i]*gamma + (1.0-gamma)*msgxt_ji);
+                    xt[j]->yacc[i] = msgxt_ji;
                 } else {
-                    //cout << "updating:" << "i=" << i << ", j=" << idx_ij << ", delta=" << delta << endl;
-                    x[i]->msg_heap->update(idx_ij, msgx_ij);
-                    //cout << "updating:" << "j=" << j << ", i=" << idx_ji << ", delta=" << (-delta) << endl;
-                    xt[j]->msg_heap->update(idx_ji, msgxt_ji);
+                    xt[j]->msg_heap->update(i, msgxt_ji); 
                 }
+
+                omp_set_lock(&locks[i]);
+                if (!x[i]->msg_heap->hasKey(j)){
+                    msgx_ij = x[i]->c[j] + delta;
+                } else {
+                    msgx_ij = x[i]->msg_heap->get_value(j) + delta;
+                } 
+                if (agd){
+                    x[i]->msg_heap->update(j, x[i]->yacc[j]*gamma + (1.0-gamma)*msgx_ij);
+                    x[i]->yacc[j] = msgx_ij;
+                } else {
+                    x[i]->msg_heap->update(j, msgx_ij);
+                }
+                omp_unset_lock(&locks[i]);
             }
 		}
         
 		Float cost = 0.0, infea = 0.0, dual_obj = 0.0;
+        #pragma omp parallel for
 		for (int i = 0; i < a; i++){
-            dual_obj += x[i]->dual_obj();
+            double dual_obj_i = x[i]->dual_obj();
+            double sub_cost = 0.0;
+            double sub_infea = 0.0;
 			for (vector<pair<Float, int>>::iterator it = x[i]->act_set->begin(); it != x[i]->act_set->end(); it++){
-				int idx_ij = it->second;
-                int j = x[i]->index[idx_ij];
-                int idx_ji = xt[j]->rev_index_map.find(i)->second;
-				cost += it->first * x[i]->c[idx_ij];
-                //cout << "i=" << i << ", j=" << j << ", infea=" << abs(xt[j]->x[i] - it->first) << endl;
-				infea += abs(xt[j]->x[idx_ji] - it->first);
-				//cout << "(" << j << "," << it->first << ")" << "\t";
-			}
-            //cout << endl;
+                int j = it->second;
+				sub_cost += it->first * x[i]->c[j];
+				sub_infea += abs(xt[j]->x[i] - it->first);
+			};
+            #pragma omp atomic
+            dual_obj += dual_obj_i;
+            #pragma omp atomic
+            cost += sub_cost;
+            #pragma omp atomic
+            infea += sub_infea;
 		}
-
+        #pragma omp parallel for
 		for (int j = 0; j < b; j++){
-            dual_obj += xt[j]->dual_obj();
+            double dual_obj_j = xt[j]->dual_obj();
+            double sub_cost = 0.0;
+            double sub_infea = 0.0;
 			for (vector<pair<Float, int>>::iterator it = xt[j]->act_set->begin(); it != xt[j]->act_set->end(); it++){
-				int idx_ji = it->second;
-                int i = xt[j]->index[idx_ji];
-                int idx_ij = x[i]->rev_index_map.find(j)->second;
-				cost += it->first * xt[j]->c[idx_ji];
-                //cout << "i=" << i << ", j=" << j << ", infea=" << abs(it->first-x[i]->x[j]) << endl;
-				infea += abs(it->first - x[i]->x[idx_ij]);
-				//cout << "(" << i << "," << it->first << ")" << "\t";
+                int i = it->second;
+				sub_cost += it->first * xt[j]->c[i];
+				sub_infea += abs(it->first - x[i]->x[j]);
 			}
-			//cout << endl;
+            #pragma omp atomic
+            dual_obj += dual_obj_j;
+            #pragma omp atomic
+            cost += sub_cost;
+            #pragma omp atomic
+            infea += sub_infea;
 		}
-		if (iter % 10 == 0){
+		if (iter % 200 == 0){
 			memset(taken, false, sizeof(bool)*b);
 			Float decoded = 0.0;
 			int* row_index = new int[a];
@@ -280,41 +294,26 @@ double struct_predict(Problem* prob, Param* param){
 				Float max_y = 0.0;
 				int index = -1;
 				for (vector<pair<Float, int>>::iterator it = x[i]->act_set->begin(); it != x[i]->act_set->end(); it++){
-                    int idx_ij = it->second;
-                    int j = x[i]->index[idx_ij];
-                    int idx_ji = xt[j]->rev_index_map.find(i)->second;
+                    int j = it->second;
 					if (!taken[j] && (it->first > max_y)){
 						max_y = it->first;
 						index = j;
 					}
 				}
 				if (index == -1){
-					for (int t = 0; t < x[i]->K; t++){
-                        int j = x[i]->index[t];
-						if (!taken[j]){
-							index = j;
-							break;
-						}
-					}
-				}
-                if (index == -1){
 					for (int j = 0; j < b; j++){
 						if (!taken[j]){
 							index = j;
 							break;
 						}
 					}
-                }
+				}
 
 				taken[index] = true;
-                if (x[i]->rev_index_map.find(index) != x[i]->rev_index_map.end()){
-                    int index_ij = x[i]->rev_index_map.find(index)->second;
-    				decoded += x[i]->c[index_ij];
-                } else {
-                    decoded -= INFI;
-                }
+    		    decoded += x[i]->c[index]/prob->upper*prob->max_c;
 			}
-            decoded *= -1;
+            decoded = (decoded+prob->offset)*(-2);
+            cout << "offset=" << prob->offset << endl;
 			delete row_index;
 			if (decoded < best_decoded){
 				best_decoded = decoded;
@@ -331,7 +330,6 @@ double struct_predict(Problem* prob, Param* param){
         cout << ", cost=" << cost;
         cout << ", infea=" << infea;
         cout << ", best_decoded=" << best_decoded;
-		cout << ", msg_delta=" << msg_delta;
         //cout << ", search=" << stats->uni_search_time;
 		cout << ", subsolve=" << stats->uni_subsolve_time;
 		cout << ", maintain=" << stats->maintain_time;
