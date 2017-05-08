@@ -11,8 +11,9 @@ class Stats{
 		Float uni_act_size;
 		Float ever_nnz_msg_size;
 		Float delta_Y_l1;
-		Float weight_b;		
+		Float weight_b;
 
+        double delta_x;
 		double uni_search_time = 0.0;
 		double uni_subsolve_time = 0.0;
 		double bi_search_time = 0.0;

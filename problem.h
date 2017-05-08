@@ -135,6 +135,7 @@ class Problem{
 		Problem(){
 		};
 		Param* param;
+        double offset;
 		int a,b; //used to store the size of the data matrix
 		vector<Float*> node_score_vecs; //store matrix from row & column direction
         vector<int*> node_index_vecs;
@@ -172,6 +173,7 @@ class BipartiteMatchingProblem : public Problem{
             memset(size, 0, sizeof(int)*(a+b));
             max_c = -1e100;
             min_c = 1e100;
+            offset = 0.0;
 			for (int i = 0; i < a; i++){
 				readLine(fin, line);
 				while (strlen(line) == 0){
@@ -182,18 +184,41 @@ class BipartiteMatchingProblem : public Problem{
                 Float* c_i = new Float[b];
                 int count = 0;
                 Float mean = 0.5;
+                Float min = 1e100;
                 for (auto it = tokens.begin(); it != tokens.end(); it++, count++){
                     c_i[count] = stod(*it);
-                    if (c_i[count] > max_c){
-                        max_c = c_i[count];
-                    }
-                    if (c_i[count] < min_c){
-                        min_c = c_i[count];
+                    if (c_i[count] < min){
+                        min = c_i[count];
                     }
                 }
+                for (int j = 0; j < b; j++){
+                    c_i[j] -= min;
+                }
+                offset += min;
                 c[i] = c_i;
 			}
-         
+            for (int j = 0; j < b; j++){
+                Float min = 1e100;
+                for (int i = 0; i < a; i++){
+                    if (c[i][j] < min){
+                        min = c[i][j];
+                    }
+                }
+                for (int i = 0; i < a; i++){
+                    c[i][j] -= min;
+                    if (c[i][j] > max_c){
+                        max_c = c[i][j];
+                    }
+                }
+                offset += min;
+            }
+
+            for (int i = 0; i < a; i++){
+                for (int j = 0; j < b; j++){
+                    c[i][j] = c[i][j]/max_c*1000.0;
+                }
+            }
+
             //cout << "rows" << endl;
             //for (int i = 0; i < a; i++){
             //    cout << i << ":";

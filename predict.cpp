@@ -83,6 +83,21 @@ void parse_cmd_line(int argc, char** argv, Param* param){
 	}
 }
 
+bool find(int i, vector<vector<int>*>& adj, int* colsol, bool* visit){
+    for (vector<int>::iterator it = adj[i]->begin(); it != adj[i]->end(); it++){
+        int j = *it;
+        if (visit[j]){
+            continue;
+        }
+        visit[j] = true;
+        if (colsol[j] == -1 || find(colsol[j], adj, colsol, visit)){
+            colsol[j] = i;
+            return true;
+        }
+    }
+    return false;
+}
+
 double struct_predict(Problem* prob, Param* param){ 
 	Float hit = 0.0;
 	Float N = 0.0;
@@ -122,6 +137,9 @@ double struct_predict(Problem* prob, Param* param){
     double theta = 1.0;
     double lambda = 0.0;
     bool agd = param->agd;
+    vector<int> active_rows;
+    bool* visit = new bool[b];
+    int* colsol = new int[b];
 	while (iter++ < param->max_iter){
 		stats->maintain_time -= get_current_time(); 
 		random_shuffle(indices, indices+a);
@@ -134,6 +152,9 @@ double struct_predict(Problem* prob, Param* param){
         /*for (int j = 0; j < b; j++){
         `    msg[j] = (1.0-theta) * msg[j] + theta*msg[j];
         }*/
+        active_rows.clear();
+        stats->delta_x = 0.0;
+        stats->uni_act_size = 0.0;
 		for (int kk = 0; kk < a; kk++){
 			int i = indices[kk];
             AFactor* node = x[i];
@@ -148,8 +169,12 @@ double struct_predict(Problem* prob, Param* param){
 		// msg[i] = (x[i][j] - xt[j][i] + mu[i][j])
         stats->maintain_time -= get_current_time(); 
         Float msg_delta = 0.0;
+        int num_active_col = 0;
         for (int j = 0; j < b; j++){
-            Float delta = (eta*sum[j]);
+            Float delta = eta*sum[j];
+            /*if (fabs(delta) < 1e-6){
+                continue;
+            }*/
             if (agd){
                 //x[i]->msg_heap->update(idx_ij, x[i]->yacc[idx_ij]*gamma + (1.0-gamma)*msgx_ij);
                 //xt[j]->msg_heap->update(idx_ji, xt[j]->yacc[idx_ji]*gamma + (1.0-gamma)*msgxt_ji);
@@ -167,17 +192,26 @@ double struct_predict(Problem* prob, Param* param){
             }
         }
         
-		Float cost = 0.0, infea = 0.0, dual_obj = 0.0;
+		Float cost = prob->offset, infea = 0.0, dual_obj = 0.0;
+        Float infea2 = 0.0;
 		for (int i = 0; i < a; i++){
+            Float max_y = -1.0;
 			for (int j = 0; j < b; j++){
-				cost += x[i]->x[j] * x[i]->c[j];
+				cost += x[i]->x[j] * (x[i]->c[j]);
+                if (x[i]->x[j] > max_y){
+                    max_y = x[i]->x[j];
+                }
 			}
+            infea2 += max(0.50005 - max_y, 0.0);
 		}
-        for (int j = 0; j < b; j++){
-            infea += abs(sum[j]);
-        }
 
-		if (iter % 1 == 0){
+        //sort(rows.begin(), rows.end(), less<pair<int, int>>());
+        //assert(rows[0].first >= rows[1].first);
+        for (int j = 0; j < b; j++){
+            infea += fabs(sum[j]);
+        }
+        int conflict = 0;
+		if (iter % 100 == 0){
 			memset(taken, false, sizeof(bool)*b);
 			Float decoded = 0.0;
 			int* row_index = new int[a];
@@ -186,28 +220,50 @@ double struct_predict(Problem* prob, Param* param){
 			}
 			random_shuffle(row_index, row_index+a);
 			//random_shuffle(indices, indices+a+b);
-			ofstream fout("pred");
+			//ofstream fout("pred");
 			for (int k = 0; k < a; k++){
 				/*if (indices[k] >= a){
 					continue;
 				}*/
 				int i = row_index[k];
-				Float max_y = -1.0;
+				Float min_c = 1e100;
+                Float true_min = 1e100;
+                for (int j = 0; j < b; j++){
+                    if (x[i]->c[j]+msg[j] < true_min){
+                        true_min = x[i]->c[j] + msg[j];
+                    }
+                }
 				int index = -1;
 				for (int j = 0; j < b; j++){
                     assert(x[i]->x[j] >= -1e-6);
-                    if (!taken[j] && (x[i]->x[j] > max_y)){
-						max_y = x[i]->x[j];
+                    if (!taken[j] && (x[i]->c[j]+msg[j] < min_c)){
+						min_c = x[i]->c[j]+msg[j];
 						index = j;
 					}
-				}
+                }
+                if (fabs(min_c - true_min) > 1e-8){
+                    conflict++;
+                }
+                //if (max_y <= 0.5){
+                //    conflict ++;
+                //    cout << max_y << endl;
+                //}
+                //Float min_c = 1e100;
+                //int index = -1;
+				//for (int j = 0; j < b; j++){
+                //    if (msg){
+				//		max_y = x[i]->x[j];
+				//		index = j;
+				//	}
+                //}
                 //cout << max_y << endl;
                 assert(index != -1);
 				taken[index] = true;
-                Float c_ij = x[i]->c[index];
-                decoded += c_ij;
+                Float c_ij = x[i]->c[index] + msg[index];
+                decoded += c_ij/1000.0*prob->max_c;
 			}
-            fout.close();
+            decoded += prob->offset;
+            //fout.close();
 			delete row_index;
 			if (decoded < best_decoded){
 				best_decoded = decoded;
@@ -219,11 +275,15 @@ double struct_predict(Problem* prob, Param* param){
 		////cout << endl;
 		cout << "iter=" << iter;
 		//cout << ", recall_rate=" << recall_rate/(a+b);
-		//cout << ", act_size=" << act_size_sum/(a+b);
+		cout << ", act_size=" << stats->uni_act_size/a;
 		//cout << ", ever_nnz_size=" << ever_nnz_size_sum/(a+b);
 		//cout << ", dual_obj=" << dual_obj;
+        cout << ", conflict=" << conflict << endl;
+        //cout << ", delta_x=" << stats->delta_x;
+        //cout << ", num_active_col=" << num_active_col;
         cout << ", cost=" << cost;
         cout << ", infea=" << infea;
+        cout << ", infea2=" << infea2;
         cout << ", best_decoded=" << best_decoded;
 		//cout << ", msg_delta=" << msg_delta;
         //cout << ", search=" << stats->uni_search_time;
@@ -243,6 +303,12 @@ double struct_predict(Problem* prob, Param* param){
 		}
         //theta = (sqrt(theta*theta*theta*theta + 4 * theta * theta) - theta * theta)/2.0;
 	}
+    //for (int i = 0; i < a; i++){
+    //    for (int j = 0; j < b; j++){
+    //        cout << x[i]->c[j] + msg[j] << " ";
+    //    }
+    //    cout << endl;
+    //}
 	return 0;
 }
 

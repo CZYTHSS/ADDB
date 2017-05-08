@@ -28,6 +28,7 @@ class AFactor: public Factor{
 		//maintained
 		//Float* grad;
 		Float* x;
+        Float* new_x;
         Float* b;
         //Float* yacc;
         Float* sum;
@@ -53,6 +54,7 @@ class AFactor: public Factor{
 
 			//relaxed prediction vector
 			x = new Float[K];
+            new_x = new Float[K];
             b = new Float[K];
 			memset(x, 0.0, sizeof(Float)*K);
 			//yacc = new Float[K];
@@ -81,6 +83,7 @@ class AFactor: public Factor{
 		~AFactor(){
 			delete x;
             delete b;
+            delete new_x;
             //delete yacc;
 			//delete[] inside;
 			//delete[] is_ever_act;
@@ -98,23 +101,24 @@ class AFactor: public Factor{
          *  
          *  
          */
-        inline void subsolve(){
-			
+        inline void subsolve(){	
+			stats->uni_subsolve_time -= get_current_time();
+
             int act_count = 0;
-            
             for (int k = 0; k < K; k++){
                 b[k] = -(c[k] + msg[k])/rho;
             }
             for (int k = 0; k < K; k++){
                 sum[k] -= x[k];
             }
-			stats->uni_subsolve_time -= get_current_time();
             solve_simplex(K, x, b);
-			stats->uni_subsolve_time += get_current_time();
             for (int k = 0; k < K; k++){
                 sum[k] += x[k];
+                if (fabs(x[k]) > 1e-6){
+                    stats->uni_act_size++;
+                }
             }
-            
+			stats->uni_subsolve_time += get_current_time();
 		}
 
         inline Float dual_obj(){
