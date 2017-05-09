@@ -122,6 +122,11 @@ double struct_predict(Problem* prob, Param* param){
     for (int i = 0; i < a+b; i++){
         omp_init_lock(&locks[i]);
     }
+    ifstream truth("log.5000");
+    int* rowsol = new int[a];
+    for (int i = 0; i < a; i++){
+        truth >> rowsol[i];
+    }
 	while (iter++ < param->max_iter){
 		stats->maintain_time -= get_current_time(); 
 		random_shuffle(indices, indices+a+b);
@@ -146,7 +151,7 @@ double struct_predict(Problem* prob, Param* param){
                 //stats->maintain_time -= get_current_time(); 
                 #pragma omp atomic
 				act_size_sum += node->act_set->size();
-				//ever_nnz_size_sum += node->msg_heap->size();
+				ever_nnz_size_sum += node->msg_heap->size();
 				//stats->maintain_time += get_current_time(); 
 			} else {
 				int j = k - a;
@@ -157,7 +162,7 @@ double struct_predict(Problem* prob, Param* param){
                 //stats->maintain_time -= get_current_time(); 
                 #pragma omp atomic
 				act_size_sum += node->act_set->size();
-				//ever_nnz_size_sum += node->msg_heap->size();
+				ever_nnz_size_sum += node->msg_heap->size();
 				//stats->maintain_time += get_current_time(); 
 			}
 		}
@@ -165,10 +170,15 @@ double struct_predict(Problem* prob, Param* param){
 		// msg[i] = (x[i][j] - xt[j][i] + mu[i][j])
 		// msg[i] = (x[i][j] - xt[j][i] + mu[i][j])
         stats->maintain_time -= get_current_time();
+        int recall = 0;
         #pragma omp parallel for
 		for (int i = 0; i < a; i++){
 			for (vector<pair<Float, int>>::iterator it = x[i]->act_set->begin(); it != x[i]->act_set->end(); it++){
 				int j = it->second;
+                if (j == rowsol[i]){
+                    #pragma omp atomic 
+                    recall++;
+                }
                 double delta = eta*(xt[j]->x[i]-it->first);
                 if (abs(delta) < 1e-20){
                     continue;
@@ -323,7 +333,7 @@ double struct_predict(Problem* prob, Param* param){
 
 		////cout << endl;
 		cout << "iter=" << iter;
-		//cout << ", recall_rate=" << recall_rate/(a+b);
+		cout << ", recall_rate=" << recall*1.0/a;
 		cout << ", act_size=" << act_size_sum/(a+b);
 		cout << ", ever_nnz_size=" << ever_nnz_size_sum/(a+b);
 		cout << ", dual_obj=" << dual_obj;

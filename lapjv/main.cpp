@@ -5,6 +5,7 @@
 #include<iostream>
 #include<omp.h>
 #include<random>
+#include<cassert>
 
 using namespace std;
 
@@ -78,4 +79,10 @@ int main(int argc, char** argv){
     double ans = lap(K, c, rowsol, colsol, u, v);
     overall_time += omp_get_wtime();
     cout << "ans=" << ans << ", overall_time=" << overall_time << endl;
+    double cost = 0.0;
+    for (int i = 0; i < K; i++){
+        cout << rowsol[i] << endl;
+        cost += c[i][rowsol[i]];
+    }
+    assert(fabs(cost-ans) < 1e-6);
 }
